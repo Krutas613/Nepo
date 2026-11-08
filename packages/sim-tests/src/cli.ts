@@ -84,6 +84,9 @@ function main(): number {
   const skipped = res.results[0]?.skipped ?? [];
   for (const s of skipped) console.log(`SKIPPED ${s.invariant}: ${s.reason}`);
   for (const r of res.results) {
+    console.log(`seed=${r.seed} 8-year-end-close evaluated at ${r.yearEndChecks} year ends`);
+  }
+  for (const r of res.results) {
     for (const v of r.violations.slice(0, 20)) {
       console.log(
         `VIOLATION seed=${v.seed} tick=${v.tick} ${v.invariant}${v.entity ? ` entity=${v.entity}` : ''}: ${v.detail}`,

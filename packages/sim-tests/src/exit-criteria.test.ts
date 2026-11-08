@@ -12,6 +12,7 @@ describe.each([
     const r = runSeed(seed, { seeds: [seed], years: 5, scenario, systems: SYSTEMS, hashEvery: 1 });
     expect(r.ticks).toBe(1800);
     expect(r.hashes).toHaveLength(1801);
+    expect(r.yearEndChecks).toBe(5);
     expect(r.violations).toEqual([]);
   });
 });

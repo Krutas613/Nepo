@@ -4,7 +4,14 @@
  * fails, route it to the owner named in `owner`.
  */
 import { balanceSheet, checkLedgerInvariants } from '@nepo/sim/accounting';
-import { findNonFinite, hashState, restore, snapshot, type World } from '@nepo/sim/engine';
+import {
+  calendarFromTick,
+  findNonFinite,
+  hashState,
+  restore,
+  snapshot,
+  type World,
+} from '@nepo/sim/engine';
 import type { AccountingState, CompanyId } from '@nepo/sim/schema';
 import type { AnySystem } from '@nepo/sim/engine';
 
@@ -146,6 +153,50 @@ export const finiteInvariant: Invariant = {
   },
 };
 
+/** True when the tick that just executed was a year end (derived from the calendar). */
+export function isFirstTickAfterYearEnd(world: World): boolean {
+  return (
+    world.state.tick > 0 && calendarFromTick(world.state.tick - 1, world.state.epochYear).isYearEnd
+  );
+}
+
+/**
+ * Check 8: year-end close. `state.tick` is the next tick to execute, so when the tick that just
+ * executed (`state.tick - 1`) was a year end, accounting's `close` phase has run and posted the
+ * closing entry: every income-statement account (4xxx-7xxx) must be exactly 0 in every entity.
+ */
+export const yearEndCloseInvariant: Invariant = {
+  id: '8-year-end-close',
+  title: 'First tick after a year end: every income-statement account (4xxx-7xxx) is 0',
+  owner: 'packages/sim/src/accounting',
+  applicable: () => true,
+  check(world, ctx) {
+    const out: Violation[] = [];
+    if (!isFirstTickAfterYearEnd(world)) return out;
+    const acc = world.state.accounting;
+    for (const entityId of Object.keys(acc.entities).sort() as CompanyId[]) {
+      const ledger = acc.entities[entityId];
+      if (ledger === undefined) continue;
+      for (const code of Object.keys(ledger.accounts).sort()) {
+        if (!/^[4-7]/.test(code)) continue;
+        const bal = ledger.accounts[code as keyof typeof ledger.accounts]?.balance ?? 0;
+        if (bal !== 0) {
+          out.push(
+            violation(
+              this.id,
+              ctx,
+              world,
+              `income-statement account ${code} has balance ${bal} after year-end close`,
+              entityId,
+            ),
+          );
+        }
+      }
+    }
+    return out;
+  },
+};
+
 function stub(id: string, title: string, until: string): Invariant {
   return {
     id,
@@ -183,6 +234,7 @@ export const INVARIANTS: readonly Invariant[] = [
   goodsConservationInvariant,
   finiteInvariant,
   economicSanityInvariant,
+  yearEndCloseInvariant,
 ];
 
 export interface InvariantRun {
@@ -240,7 +292,7 @@ export function compareHashSequences(
 
 /**
  * Snapshot/restore equivalence: snapshot `world` now (through JSON text), restore it, step both
- * `ticks` more, and compare the hash at every tick. `scenario` is passed to `restore` (REQ-001).
+ * `ticks` more, and compare the hash at every tick.
  * Both worlds are advanced; use throwaway worlds.
  */
 export function snapshotEquivalence(
@@ -251,7 +303,7 @@ export function snapshotEquivalence(
   seed: number,
 ): Violation[] {
   const text = JSON.stringify(snapshot(world));
-  const restored = restore(JSON.parse(text) as unknown, systems, { scenario: world.scenario });
+  const restored = restore(JSON.parse(text) as unknown, systems);
   const a: string[] = [hashState(world.state)];
   const b: string[] = [hashState(restored.state)];
   for (let i = 0; i < ticks; i++) {

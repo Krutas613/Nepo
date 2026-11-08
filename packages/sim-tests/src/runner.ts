@@ -11,6 +11,7 @@ import {
 import type { Scenario } from '@nepo/sim/schema';
 import {
   compareHashSequences,
+  isFirstTickAfterYearEnd,
   runInvariants,
   skippedInvariants,
   snapshotEquivalence,
@@ -47,6 +48,8 @@ export interface SeedResult {
   violations: Violation[];
   skipped: { invariant: string; reason: string }[];
   durationMs: number;
+  /** Number of post-year-end ticks at which `8-year-end-close` was evaluated. */
+  yearEndChecks: number;
   metrics: SeedMetrics;
 }
 
@@ -83,6 +86,7 @@ interface Pass {
   hashes: string[];
   violations: Violation[];
   skipped: { invariant: string; reason: string }[];
+  yearEndChecks: number;
 }
 
 function onePass(
@@ -97,8 +101,10 @@ function onePass(
   const violations: Violation[] = [];
   let skipped: { invariant: string; reason: string }[] = skippedInvariants();
   const ctx = { seed };
+  let yearEndChecks = 0;
   const check = (): void => {
     if (!withInvariants) return;
+    if (isFirstTickAfterYearEnd(world)) yearEndChecks++;
     const run = runInvariants(world, ctx);
     violations.push(...run.violations);
     skipped = run.skipped;
@@ -114,7 +120,7 @@ function onePass(
     check();
     record();
   }
-  return { world, hashes, violations, skipped };
+  return { world, hashes, violations, skipped, yearEndChecks };
 }
 
 export function runSeed(seed: number, opts: SweepOptions): SeedResult {
@@ -152,6 +158,7 @@ export function runSeed(seed: number, opts: SweepOptions): SeedResult {
     hashes: first.hashes,
     violations,
     skipped: first.skipped,
+    yearEndChecks: first.yearEndChecks,
     durationMs: performance.now() - t0,
     metrics: metricsOf(first.world),
   };

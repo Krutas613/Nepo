@@ -41,10 +41,11 @@ per seed), then PASS/FAIL.
 | `5-finite`             | `findNonFinite(state)` is empty                                                                                          | active                              |
 | `6-hash-stability`     | Identical hash sequence across repeat runs; snapshot/restore equivalence                                                 | active (sweep + tests)              |
 | `7-economic-sanity`    | Bounded volatility, no collapse, no runaway inflation                                                                    | stubbed, until M2                   |
+| `8-year-end-close`     | On the first tick after a year end (from `calendarFromTick`), every 4xxx-7xxx account in every entity is 0               | active                              |
 
 Stubs are reported as SKIPPED, never green. Invariants must never be weakened or deleted to make a
 run pass: a failure is routed to the owner of the offending slice (the `owner` field of the
-invariant; `1`/`2` are `packages/sim/src/accounting`, `5` is whichever system owns the path in the detail).
+invariant; `1`/`2`/`8` are `packages/sim/src/accounting`, `5` is whichever system owns the path in the detail).
 
 ## `--json` output shape (for qa-triage)
 
@@ -52,6 +53,7 @@ invariant; `1`/`2` are `packages/sim/src/accounting`, `5` is whichever system ow
 { scenario, years, hashEvery, pass,
   results: [{ seed, ticks, finalHash, hashes: string[], durationMs,
               metrics: { ticks, totalCash, journalEntries, reports, companies },
+              yearEndChecks,
               skipped: [{ invariant, reason }],
               violations: [{ invariant, seed, tick, entity?, detail }] }] }
 ```
@@ -72,9 +74,9 @@ intended (new state, new entries) but must be a deliberate, reviewed update: exp
 PR, then run `pnpm sweep -- --seeds 5 --years 5 --update-snapshots` (or `UPDATE_SNAPSHOTS=1 pnpm --filter
 @nepo/sim-tests test regression`). Never update it to silence an unexplained change.
 
-## Caveat: snapshot schema and test systems
+## Snapshots and test systems
 
-The v1 snapshot schema is strict and rejects unknown slices. A test system registered under a real
-`SystemId` other than `accounting` adds a slice that makes `snapshot`/`restore` fail. For
-snapshot-equivalence tests use accounting-only worlds (or no systems). `restore` also needs
-`{ scenario }` (REQ-001) because snapshots do not carry the scenario.
+`restore(input, systems, { migrations? })`: snapshots carry their own `scenario`, so there is no
+`scenario` option. Test systems may be registered under any `SystemId` except `core`; untyped slices
+hold plain JSON and round-trip through `snapshot`/`restore`. `close` is reserved for the accounting
+system (ADR-009): any other system registering it throws `InvariantError('systems.close_reserved')`.

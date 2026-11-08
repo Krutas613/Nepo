@@ -7,7 +7,10 @@ import {
   economicSanityInvariant,
   goodsConservationInvariant,
   negativeQuantityInvariant,
+  INVARIANTS,
+  isFirstTickAfterYearEnd,
   runInvariants,
+  yearEndCloseInvariant,
   snapshotEquivalence,
 } from './invariants.js';
 import { advance, makeWorld, SYSTEMS } from './helpers.js';
@@ -119,5 +122,51 @@ describe('invariants detect corruption', () => {
     ]) {
       expect(inv.applicable(w)).toBe(false);
     }
+  });
+
+  describe('8-year-end-close', () => {
+    function revenue(world: World): { balance: Money } {
+      const ledger = world.state.accounting.entities[companyId('co_000001')];
+      const acct = Object.entries(ledger?.accounts ?? {}).find(([code]) => code.startsWith('4'));
+      if (acct === undefined) throw new Error('no 4xxx account');
+      return acct[1];
+    }
+
+    it('is registered as an active invariant', () => {
+      expect(INVARIANTS).toContain(yearEndCloseInvariant);
+      expect(yearEndCloseInvariant.applicable(makeWorld(1))).toBe(true);
+    });
+
+    it('passes on a clean world on the first tick after year end and detects corruption', () => {
+      const w = makeWorld(1);
+      advance(w, 360);
+      expect(isFirstTickAfterYearEnd(w)).toBe(true);
+      expect(runInvariants(w, ctx).violations).toEqual([]);
+      const acct = revenue(w);
+      expect(acct.balance).toBe(0);
+      acct.balance = money(acct.balance + 3);
+      const v = runInvariants(w, ctx).violations.filter((x) => x.invariant === '8-year-end-close');
+      expect(v).toHaveLength(1);
+      expect(v[0]?.entity).toBe(companyId('co_000001'));
+      expect(v[0]?.tick).toBe(360);
+    });
+
+    it('is silent on other ticks (mid-year balances are legitimately non-zero)', () => {
+      const w = makeWorld(1);
+      advance(w, 359);
+      expect(isFirstTickAfterYearEnd(w)).toBe(false);
+      revenue(w).balance = money(5);
+      expect(ids(w)).not.toContain('8-year-end-close');
+    });
+
+    it('fires exactly at ticks 360, 720, ... derived from the calendar', () => {
+      const w = makeWorld(1);
+      const fired: number[] = [];
+      for (let i = 0; i < 1100; i++) {
+        step(w);
+        if (isFirstTickAfterYearEnd(w)) fired.push(w.state.tick);
+      }
+      expect(fired).toEqual([360, 720, 1080]);
+    });
   });
 });
