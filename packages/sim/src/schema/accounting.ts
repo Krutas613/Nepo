@@ -2,11 +2,14 @@
  * Accounting slice types (ARCHITECTURE.md section 8.1). Owned at runtime by the `accounting`
  * system; the chart template, `ACCOUNTS` constants and the posting API live in `accounting/`.
  *
+ * Account codes are stored letter-prefixed (`'a1000'`, schema v2); docs write `1000`.
+ *
  * Balances are debit-normal signed for every account type: debits increase, credits decrease.
  * Liability/equity/revenue accounts therefore carry negative balances; Σ balance per entity === 0.
  */
 import { z } from 'zod';
 import { deepFreeze } from './freeze.js';
+import { checkKeyedBy } from './keyed.js';
 import {
   AccountCodeSchema,
   CompanyIdSchema,
@@ -233,16 +236,7 @@ export const EntityLedgerSchema = z
     reports: z.array(PeriodReportSchema),
   })
   .superRefine((ledger, ctx) => {
-    for (const code of Object.keys(ledger.accounts).sort()) {
-      const account = ledger.accounts[code as AccountCode];
-      if (account !== undefined && account.code !== code) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['accounts', code, 'code'],
-          message: `account keyed ${code} has code ${account.code}`,
-        });
-      }
-    }
+    checkKeyedBy(ledger.accounts, 'code', (a) => a.code, ['accounts'], ctx);
   }) satisfies z.ZodType<EntityLedger>;
 
 export const AccountingStateSchema = z
@@ -251,14 +245,5 @@ export const AccountingStateSchema = z
     journal: z.array(JournalEntrySchema),
   })
   .superRefine((state, ctx) => {
-    for (const key of Object.keys(state.entities).sort()) {
-      const ledger = state.entities[key as CompanyId];
-      if (ledger !== undefined && ledger.entityId !== key) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['entities', key, 'entityId'],
-          message: `ledger keyed ${key} has entityId ${ledger.entityId}`,
-        });
-      }
-    }
+    checkKeyedBy(state.entities, 'entityId', (l) => l.entityId, ['entities'], ctx);
   }) satisfies z.ZodType<AccountingState>;

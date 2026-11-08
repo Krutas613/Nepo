@@ -8,8 +8,13 @@ import { z } from 'zod';
 import { ScenarioSchema, type Scenario } from './scenario.js';
 import { WorldStateSchema, type WorldState } from './world.js';
 
-/** Version of the `WorldState` shape. v1: initial M0 types. */
-export const SCHEMA_VERSION = 1;
+/**
+ * Version of the `WorldState` shape.
+ * - v1: initial M0 types.
+ * - v2: M1 typed slices `economy`, `manufacturing`, `retail`, `finance`; account codes stored as
+ *   `'a1000'` (migration note in docs/schema-requests.md, REQ-002).
+ */
+export const SCHEMA_VERSION = 2;
 
 export const SNAPSHOT_FORMAT = 'nepo/snapshot';
 

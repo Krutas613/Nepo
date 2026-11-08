@@ -6,11 +6,31 @@
  * NaN, +-Infinity and -0 are forbidden everywhere.
  */
 import { z } from 'zod';
-import { AccountingStateSchema, type AccountingState } from './accounting.js';
+import {
+  AccountingStateSchema,
+  EMPTY_ACCOUNTING_STATE,
+  type AccountingState,
+} from './accounting.js';
 import { CommandSchema, type Command } from './commands.js';
 import { CompanySchema, type Company } from './company.js';
-import { CompanyIdSchema, EntityKindSchema, type CompanyId, type EntityKind } from './ids.js';
+import { EconomyStateSchema, EMPTY_ECONOMY_STATE, type EconomyState } from './economy.js';
+import { FinanceStateSchema, EMPTY_FINANCE_STATE, type FinanceState } from './finance.js';
+import { deepFreeze } from './freeze.js';
+import {
+  CompanyIdSchema,
+  EntityKindSchema,
+  RecordKeySchema,
+  type CompanyId,
+  type EntityKind,
+} from './ids.js';
 import { JsonValueSchema, type JsonValue } from './json.js';
+import { checkKeyedBy } from './keyed.js';
+import {
+  EMPTY_MANUFACTURING_STATE,
+  ManufacturingStateSchema,
+  type ManufacturingState,
+} from './manufacturing.js';
+import { EMPTY_RETAIL_STATE, RetailStateSchema, type RetailState } from './retail.js';
 import { NonNegativeIntegerSchema, SafeIntegerSchema } from './money.js';
 import type { SystemId } from './system.js';
 
@@ -29,7 +49,16 @@ export interface RngStreamState {
  * is not registered the engine installs the slice's `EMPTY_<SLICE>` constant (section 2). The slice
  * key is the `SystemId`, except `core`, whose slice is `companies`.
  */
-export type TypedSliceSystemId = 'core' | 'accounting';
+export type TypedSliceSystemId =
+  | 'core'
+  | 'accounting'
+  | 'economy'
+  | 'manufacturing'
+  | 'retail'
+  | 'finance';
+
+/** Typed slices whose key is their `SystemId` (every typed slice except `core`'s `companies`). */
+export type TypedDomainSliceId = Exclude<TypedSliceSystemId, 'core'>;
 
 /** `SystemId`s whose slice type has not landed yet. Shrinks by one each time a slice is typed. */
 export type UntypedSliceId = Exclude<SystemId, TypedSliceSystemId>;
@@ -63,16 +92,38 @@ export interface WorldState extends UntypedSlices {
   /** Queued for the next tick's ingest phase, ascending `seq`. */
   pendingCommands: Command[];
   registry: RegistryState;
-  /** Stream name -> state. */
+  /** Stream name -> state. Stream names are never integer-like. */
   rng: Record<string, RngStreamState>;
   /** Core slice, owned by the engine's `core` system. */
   companies: Record<CompanyId, Company>;
   /** Owned by the `accounting` system. */
   accounting: AccountingState;
-  // Milestone 1+: economy, manufacturing, retail, finance; M2: logistics; M3: ai; M4: hr.
-  // Each arrives as a new required property with a SCHEMA_VERSION bump and migration notes; until
-  // then it may appear only as an untyped slice (`UntypedSlices`).
+  /** Owned by `economy` (schema v2). */
+  economy: EconomyState;
+  /** Owned by `manufacturing` (schema v2). */
+  manufacturing: ManufacturingState;
+  /** Owned by `retail` (schema v2). */
+  retail: RetailState;
+  /** Owned by `finance` (schema v2). */
+  finance: FinanceState;
+  // M2: logistics; M3: ai; M4: hr. Each arrives as a new required property with a SCHEMA_VERSION
+  // bump and migration notes; until then it may appear only as an untyped slice (`UntypedSlices`).
 }
+
+/**
+ * The empty value of every typed domain slice, for the engine: `createWorld` installs a copy of
+ * `EMPTY_TYPED_SLICES[id]` for each typed slice whose system is not registered, and migrations use
+ * the same values, so no module hand-writes a slice shape. Deep-frozen: install copies.
+ * (Assignable to `Readonly<Record<TypedDomainSliceId, unknown>>`, the type schema-m1.md names.)
+ */
+export const EMPTY_TYPED_SLICES: { readonly [K in TypedDomainSliceId]: WorldState[K] } =
+  deepFreeze({
+    accounting: EMPTY_ACCOUNTING_STATE,
+    economy: EMPTY_ECONOMY_STATE,
+    manufacturing: EMPTY_MANUFACTURING_STATE,
+    retail: EMPTY_RETAIL_STATE,
+    finance: EMPTY_FINANCE_STATE,
+  });
 
 // ---------------------------------------------------------------------------------------------
 // zod validators
@@ -90,11 +141,7 @@ export const RngStreamStateSchema = z.strictObject({
 
 /** One `JsonValue` validator per untyped slice key; must list exactly the `UntypedSliceId`s. */
 const untypedSliceShape = {
-  economy: JsonValueSchema.exactOptional(),
-  manufacturing: JsonValueSchema.exactOptional(),
   logistics: JsonValueSchema.exactOptional(),
-  retail: JsonValueSchema.exactOptional(),
-  finance: JsonValueSchema.exactOptional(),
   ai: JsonValueSchema.exactOptional(),
   hr: JsonValueSchema.exactOptional(),
 } satisfies Record<UntypedSliceId, z.ZodType>;
@@ -108,21 +155,16 @@ export const WorldStateSchema = z
     commandSeq: NonNegativeIntegerSchema,
     pendingCommands: z.array(CommandSchema),
     registry: RegistryStateSchema,
-    rng: z.record(z.string(), RngStreamStateSchema),
+    rng: z.record(RecordKeySchema, RngStreamStateSchema),
     companies: z.record(CompanyIdSchema, CompanySchema),
     accounting: AccountingStateSchema,
+    economy: EconomyStateSchema,
+    manufacturing: ManufacturingStateSchema,
+    retail: RetailStateSchema,
+    finance: FinanceStateSchema,
   })
   .superRefine((state, ctx) => {
-    for (const key of Object.keys(state.companies).sort()) {
-      const company = state.companies[key as CompanyId];
-      if (company !== undefined && company.id !== key) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['companies', key, 'id'],
-          message: `company keyed ${key} has id ${company.id}`,
-        });
-      }
-    }
+    checkKeyedBy(state.companies, 'id', (c) => c.id, ['companies'], ctx);
     let previousSeq = 0;
     state.pendingCommands.forEach((command, i) => {
       if (command.seq <= previousSeq || command.seq > state.commandSeq) {
