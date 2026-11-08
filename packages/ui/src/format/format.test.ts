@@ -22,7 +22,7 @@ describe('formatMoney', () => {
   it('uses a minus sign by default and parentheses on request', () => {
     expect(formatMoney(-123456)).toBe('-$1,234.56');
     expect(formatMoney(-123456, { negative: 'parens' })).toBe('($1,234.56)');
-    expect(formatMoney(123456, { negative: 'parens' })).toBe('$1,234.56 ');
+    expect(formatMoney(123456, { negative: 'parens' })).toBe('$1,234.56\u00a0');
   });
 
   it('never prints a negative zero', () => {
@@ -60,7 +60,7 @@ describe('formatQty / percent / date', () => {
   it('formats quantities', () => {
     expect(formatQty(0)).toBe('0');
     expect(formatQty(1234567)).toBe('1,234,567');
-    expect(formatQty(-1200, 'kg')).toBe('-1,200 kg');
+    expect(formatQty(-1200, 'kg')).toBe('-1,200\u00a0kg');
   });
   it('formats percents', () => {
     expect(formatPercent(0.1234)).toBe('12.3%');

@@ -109,7 +109,11 @@ export function balanceSheetRows(b: BalanceSheet): StatementRow[] {
     ...equityRows,
     total('subtotal', 'Total equity', b.equity),
     total('total', 'Total liabilities and equity', b.liabilities + b.equity),
-    { kind: 'check', label: 'Assets less liabilities and equity', amount: b.assets - b.liabilities - b.equity },
+    {
+      kind: 'check',
+      label: 'Assets less liabilities and equity',
+      amount: b.assets - b.liabilities - b.equity,
+    },
   ];
 }
 

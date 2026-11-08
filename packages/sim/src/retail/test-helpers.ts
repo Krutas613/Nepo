@@ -28,10 +28,13 @@ export const GROCERY = storeFormatId('grocery');
 export const STORE_1 = storeId('st_000001');
 export const FACILITY_1 = facilityId('fa_000001');
 
-export const GROCERY_FORMAT: StoreFormat = {
-  ...(M1_CONTENT_PACK.storeFormats[GROCERY] as StoreFormat),
-  categories: ['consumer'],
-};
+function groceryFormat(): StoreFormat {
+  const format = M1_CONTENT_PACK.storeFormats[GROCERY];
+  if (format === undefined) throw new Error('fixture lacks grocery');
+  return { ...format, categories: ['consumer'] };
+}
+
+export const GROCERY_FORMAT: StoreFormat = groceryFormat();
 
 /** An operating grocery store with a bread shelf line holding `stock` units worth `value`. */
 export function makeStore(stock = 0, value = 0, overrides: Partial<Store> = {}): Store {

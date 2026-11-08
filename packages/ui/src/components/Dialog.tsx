@@ -31,7 +31,12 @@ export function Dialog({ open, onClose, title, children, width = 520 }: DialogPr
         <div className="dialog-inner">
           <header className="dialog-head">
             <h2>{title}</h2>
-            <button type="button" className="btn btn-ghost btn-sm" aria-label="Close" onClick={onClose}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              aria-label="Close"
+              onClick={onClose}
+            >
               Close
             </button>
           </header>

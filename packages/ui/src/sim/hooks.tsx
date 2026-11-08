@@ -4,7 +4,14 @@
  * selected value is not `equal` to the previous one. Select primitives or small tuples, never
  * large arrays rebuilt on every call.
  */
-import { createContext, useContext, useRef, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useRef,
+  useSyncExternalStore,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import type { GameStore, GameView } from './store.js';
 
 /**

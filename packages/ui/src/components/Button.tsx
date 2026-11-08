@@ -16,7 +16,13 @@ export function Button({
   className,
   ...rest
 }: ButtonProps): ReactElement {
-  const cls = ['btn', `btn-${variant}`, `btn-${size}`, active === true ? 'is-active' : '', className ?? '']
+  const cls = [
+    'btn',
+    `btn-${variant}`,
+    `btn-${size}`,
+    active === true ? 'is-active' : '',
+    className ?? '',
+  ]
     .filter(Boolean)
     .join(' ');
   return <button type={type} aria-pressed={active} className={cls} {...rest} />;

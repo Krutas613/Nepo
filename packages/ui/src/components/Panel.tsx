@@ -12,7 +12,14 @@ export interface PanelProps {
   className?: string;
 }
 
-export function Panel({ title, actions, children, flush, fill, className }: PanelProps): ReactElement {
+export function Panel({
+  title,
+  actions,
+  children,
+  flush,
+  fill,
+  className,
+}: PanelProps): ReactElement {
   const cls = ['panel', fill ? 'panel-fill' : '', className ?? ''].filter(Boolean).join(' ');
   return (
     <section className={cls}>

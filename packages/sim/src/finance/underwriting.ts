@@ -138,8 +138,7 @@ export function assessLoan(
  * leverage test only get harder as principal grows). `0` when even `minPrincipal` is refused.
  */
 export function availableCreditFor(bs: UnderwritingBalanceSheet, bank: ReadonlyBank): Money {
-  const accepts = (p: number): boolean =>
-    assessLoan(bs, money(p), bank.maxTermMonths, bank, 0).ok;
+  const accepts = (p: number): boolean => assessLoan(bs, money(p), bank.maxTermMonths, bank, 0).ok;
   let lo: number = bank.minPrincipal;
   if (!accepts(lo)) return ZERO_MONEY;
   // The equity cap is an upper bound on any accepted principal.

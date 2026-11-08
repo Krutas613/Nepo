@@ -26,10 +26,7 @@ import {
 } from '../accounting/index.js';
 import { ECONOMY_SERVICE, type EconomyApi } from '../economy/index.js';
 import { sortedKeys, type System, type TickContext } from '../engine/index.js';
-import {
-  MANUFACTURING_SERVICE,
-  type ManufacturingApi,
-} from '../manufacturing/index.js';
+import { MANUFACTURING_SERVICE, type ManufacturingApi } from '../manufacturing/index.js';
 import {
   InvariantError,
   money,
@@ -87,7 +84,10 @@ function servicesOf(ctx: Ctx): Services {
 function formatOf(ctx: Ctx, store: Store): ReadonlyStoreFormat {
   const format = ctx.scenario.content.storeFormats[store.formatId];
   if (format === undefined) {
-    throw new InvariantError('retail.unknown_format', `${store.id} has unknown format ${store.formatId}`);
+    throw new InvariantError(
+      'retail.unknown_format',
+      `${store.id} has unknown format ${store.formatId}`,
+    );
   }
   return format;
 }
@@ -114,7 +114,10 @@ function applyCommand(ctx: Ctx, command: Command, svc: Services): void {
         marketId: city === undefined ? null : svc.economy.marketOfCity(cityId),
         cash: svc.accounting.cash(command.issuer),
       });
-      if (!verdict.ok) return rejectWith(ctx, command, verdict.error);
+      if (!verdict.ok) {
+        rejectWith(ctx, command, verdict.error);
+        return;
+      }
       const { format, marketId } = verdict.value;
       const id = ctx.issueId('store');
       ctx.slice.stores[id] = createStore({
@@ -155,7 +158,10 @@ function applyCommand(ctx: Ctx, command: Command, svc: Services): void {
         },
         price,
       );
-      if (!verdict.ok) return rejectWith(ctx, command, verdict.error);
+      if (!verdict.ok) {
+        rejectWith(ctx, command, verdict.error);
+        return;
+      }
       if (store === undefined) return;
       const line = (store.shelves[productId] ??= newShelfLine());
       line.price = price;
@@ -174,7 +180,10 @@ function applyCommand(ctx: Ctx, command: Command, svc: Services): void {
         facility: sourceFacilityId === null ? null : svc.manufacturing.facility(sourceFacilityId),
         targetStock,
       });
-      if (!verdict.ok) return rejectWith(ctx, command, verdict.error);
+      if (!verdict.ok) {
+        rejectWith(ctx, command, verdict.error);
+        return;
+      }
       if (store === undefined) return;
       const line = (store.shelves[productId] ??= newShelfLine());
       line.restock = { sourceFacilityId, targetStock };
@@ -184,7 +193,13 @@ function applyCommand(ctx: Ctx, command: Command, svc: Services): void {
       });
       return;
     }
-    default:
+    // Routed to other systems; `handles` keeps them out of this inbox.
+    case 'company.rename':
+    case 'facility.build':
+    case 'facility.set_production':
+    case 'facility.set_recipe':
+    case 'loan.repay':
+    case 'loan.request':
       return;
   }
 }
@@ -267,7 +282,7 @@ function sell(ctx: Ctx, svc: Services): void {
   const groups: Record<MarketId, Record<ProductId, StoreId[]>> = {};
   for (const storeId of sortedKeys(ctx.slice.stores)) {
     const store = ctx.slice.stores[storeId];
-    if (store === undefined || store.status !== 'operating') continue;
+    if (store?.status !== 'operating') continue;
     for (const productId of sortedKeys(store.shelves)) {
       if ((store.shelves[productId]?.lot.quantity ?? 0) <= 0) continue;
       const byProduct = (groups[store.marketId] ??= {});
@@ -292,7 +307,12 @@ function sell(ctx: Ctx, svc: Services): void {
         const line = store?.shelves[productId];
         const offer = offers[i];
         const sold = clearing.sold[i];
-        if (store === undefined || line === undefined || offer === undefined || sold === undefined) {
+        if (
+          store === undefined ||
+          line === undefined ||
+          offer === undefined ||
+          sold === undefined
+        ) {
           throw new InvariantError('retail.clearing_misaligned', `${id}/${productId}`);
         }
         line.unmetToday = unmetDemand(offer.quantity, sold, clearing.demandAfter);
@@ -350,7 +370,11 @@ function closeStoreDay(ctx: Ctx, store: Store, svc: Services): void {
   }
 
   if (ctx.date.isMonthEnd) {
-    const charge = depreciationCharge(store.cost, store.accumulatedDepreciation, format.usefulLifeMonths);
+    const charge = depreciationCharge(
+      store.cost,
+      store.accumulatedDepreciation,
+      format.usefulLifeMonths,
+    );
     if (charge > 0) {
       svc.accounting.postOrThrow(store.ownerId, depreciation(charge, 'retail', { ref }));
       store.accumulatedDepreciation = money(store.accumulatedDepreciation + charge);
@@ -386,7 +410,7 @@ export const retailSystem: System<RetailState> = {
       sell(ctx, svc);
       for (const id of ids) {
         const store = ctx.slice.stores[id];
-        if (store !== undefined && store.status === 'operating') closeStoreDay(ctx, store, svc);
+        if (store?.status === 'operating') closeStoreDay(ctx, store, svc);
       }
     },
   },

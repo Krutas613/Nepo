@@ -321,6 +321,7 @@ interface ServiceHandle<S> {
   // what a service closes over (lives for the world's lifetime)
   slice(): S; // current own slice (mutable)
   state(): DeepReadonly<WorldState>;
+  scenario(): DeepReadonly<Scenario>; // same object as ctx.scenario; lets a service read content without per-phase re-binding
   tick(): number;
   date(): CalendarDate;
   issueId<K extends EntityKind>(kind: K): IdOf<K>;

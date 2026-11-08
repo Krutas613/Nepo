@@ -29,7 +29,13 @@ export function niceTicks(min: number, max: number, target = 4): number[] {
 const M = { top: 8, right: 12, bottom: 22, left: 64 };
 
 /** Minimal dependency-free SVG line chart: one series, grid, end labels. Theme via CSS vars. */
-export function LineChart({ points, height = 180, formatY, formatX, ...rest }: LineChartProps): ReactElement {
+export function LineChart({
+  points,
+  height = 180,
+  formatY,
+  formatX,
+  ...rest
+}: LineChartProps): ReactElement {
   const box = useRef<HTMLDivElement>(null);
   const { width } = useElementSize(box, { width: 600, height });
   const w = Math.max(200, width);
@@ -62,7 +68,8 @@ export function LineChart({ points, height = 180, formatY, formatX, ...rest }: L
     const path: string[] = [];
     for (let i = 0; i < points.length; i += stride) {
       const p = points[i];
-      if (p !== undefined) path.push(`${path.length === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`);
+      if (p !== undefined)
+        path.push(`${path.length === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`);
     }
     const last = points[points.length - 1];
     if (last !== undefined && (points.length - 1) % stride !== 0) {
@@ -73,7 +80,13 @@ export function LineChart({ points, height = 180, formatY, formatX, ...rest }: L
         {niceTicks(minY, maxY).map((t) => (
           <g key={t}>
             <line className="chart-grid" x1={M.left} x2={w - M.right} y1={sy(t)} y2={sy(t)} />
-            <text className="chart-label" x={M.left - 6} y={sy(t)} textAnchor="end" dominantBaseline="middle">
+            <text
+              className="chart-label"
+              x={M.left - 6}
+              y={sy(t)}
+              textAnchor="end"
+              dominantBaseline="middle"
+            >
               {formatY(t)}
             </text>
           </g>
@@ -85,7 +98,9 @@ export function LineChart({ points, height = 180, formatY, formatX, ...rest }: L
           {formatX(maxX)}
         </text>
         <path className="chart-line" d={path.join('')} />
-        {last !== undefined && <circle className="chart-dot" cx={sx(last.x)} cy={sy(last.y)} r={3} />}
+        {last !== undefined && (
+          <circle className="chart-dot" cx={sx(last.x)} cy={sy(last.y)} r={3} />
+        )}
       </>
     );
   }

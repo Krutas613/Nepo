@@ -136,7 +136,11 @@ export class GameClock {
     // Keep the sub-tick fraction; drop any backlog beyond the cap so the UI stays responsive.
     this.accumulator -= due * 1000;
     if (count > 0) this.runSteps(count);
-    if (this.running) this.requestFrame();
+    if (this.isRunning()) this.requestFrame();
+  }
+
+  private isRunning(): boolean {
+    return this.running;
   }
 
   private runSteps(count: number): boolean {

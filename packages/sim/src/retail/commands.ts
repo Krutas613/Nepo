@@ -141,7 +141,8 @@ export function validateSetRestockPolicy(facts: RestockFacts): Result<null, Reje
   const format = base.value;
   if (facts.sourceFacilityId !== null) {
     const facility = facts.facility;
-    if (facility === null) return reject('unknown_facility', `no facility ${facts.sourceFacilityId}`);
+    if (facility === null)
+      return reject('unknown_facility', `no facility ${facts.sourceFacilityId}`);
     if (facility.ownerId !== facts.issuer) {
       return reject('facility_not_owner', `${facility.id} belongs to ${facility.ownerId}`);
     }

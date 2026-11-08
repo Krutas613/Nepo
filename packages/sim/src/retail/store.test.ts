@@ -53,7 +53,12 @@ describe('capacity and restock sizing', () => {
   it('counts units and value across lines and frees the remainder', () => {
     const store = makeStore(300, 900);
     const second = newShelfLine();
-    second.lot = { quantity: quantity(100), value: money(50), received: quantity(100), issued: quantity(0) };
+    second.lot = {
+      quantity: quantity(100),
+      value: money(50),
+      received: quantity(100),
+      issued: quantity(0),
+    };
     store.shelves[GRAIN] = second;
     expect(shelfUnits(store)).toBe(400);
     expect(shelfValue(store)).toBe(950);

@@ -54,11 +54,7 @@ export interface FinanceEnv {
 export type RequestLoanCode = 'not_owner' | UnderwritingCode;
 /** Rejection codes of `loan.repay` (finance.md section 5). */
 export type RepayLoanCode =
-  | 'unknown_loan'
-  | 'not_owner'
-  | 'loan_not_active'
-  | 'invalid_amount'
-  | 'insufficient_cash';
+  'unknown_loan' | 'not_owner' | 'loan_not_active' | 'invalid_amount' | 'insufficient_cash';
 
 export interface CommandRejection<C extends string> {
   code: C;
@@ -289,7 +285,10 @@ export function processOverdraft(
     if (interest > 0) {
       env.accounting.postOrThrow(
         companyId,
-        interestAccrual(interest, SOURCE, { memo: 'Overdraft interest', ref: creditRef(companyId) }),
+        interestAccrual(interest, SOURCE, {
+          memo: 'Overdraft interest',
+          ref: creditRef(companyId),
+        }),
       );
       credit.overdraftAccrued = addMoney(credit.overdraftAccrued, interest);
     }

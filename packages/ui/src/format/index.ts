@@ -15,6 +15,8 @@ export interface MoneyFormatOptions {
   cents?: boolean;
 }
 
+/** No-break space (a constant, because formatters strip literal ones). */
+const NBSP = String.fromCharCode(160);
 const MISSING = '—';
 
 /** `1234567` -> `1,234,567`. Input must be a non-negative integer string. */
@@ -28,7 +30,7 @@ function groupThousands(digits: string): string {
 }
 
 function wrapNegative(body: string, negative: boolean, style: NegativeStyle): string {
-  if (!negative) return style === 'parens' ? `${body} ` : body;
+  if (!negative) return style === 'parens' ? `${body}${NBSP}` : body;
   return style === 'parens' ? `(${body})` : `-${body}`;
 }
 
@@ -39,7 +41,8 @@ function wrapNegative(body: string, negative: boolean, style: NegativeStyle): st
 export function formatMoney(minor: number, options: MoneyFormatOptions = {}): string {
   if (!Number.isFinite(minor)) return MISSING;
   const { negative = 'minus', symbol = '$', cents = true } = options;
-  const rounded = Math.round(minor);
+  // Whole-dollar display rounds to the nearest dollar before deciding the sign.
+  const rounded = cents ? Math.round(minor) : Math.round(minor / 100) * 100;
   const abs = Math.abs(rounded);
   const dollars = Math.floor(abs / 100);
   const remainder = abs - dollars * 100;
@@ -62,7 +65,8 @@ export function formatMoneyCompact(minor: number): string {
   for (const [size, suffix] of scaled) {
     if (dollars >= size) {
       const value = dollars / size;
-      const text = value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2);
+      const text =
+        value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2);
       return `${sign}$${text}${suffix}`;
     }
   }
@@ -75,7 +79,7 @@ export function formatQty(qty: number, unit?: string): string {
   const rounded = Math.round(qty);
   const body = groupThousands(String(Math.abs(rounded)));
   const text = rounded < 0 ? `-${body}` : body;
-  return unit === undefined || unit === '' ? text : `${text} ${unit}`;
+  return unit === undefined || unit === '' ? text : `${text}${NBSP}${unit}`;
 }
 
 /** Ratio to percent text: `0.1234` -> `12.3%`. */
@@ -99,7 +103,11 @@ export function formatDate(date: DateLike): string {
 }
 
 /** Label for a closed period: `Y2000 M03`, `Y2000 Q1`, `Y2000`. */
-export function formatPeriod(kind: 'month' | 'quarter' | 'year', year: number, month: number): string {
+export function formatPeriod(
+  kind: 'month' | 'quarter' | 'year',
+  year: number,
+  month: number,
+): string {
   switch (kind) {
     case 'month':
       return `Y${String(year)} M${pad2(month)}`;

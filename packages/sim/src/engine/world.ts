@@ -302,6 +302,7 @@ function createServiceFor(world: World, internals: WorldInternals, system: AnySy
       return stateRecord(state)[sliceKey];
     },
     state: () => readonlyView(state),
+    scenario: () => readonlyView(world.scenario),
     tick: () => state.tick,
     date: () => calendarFromTick(state.tick, state.epochYear),
     issueId: <K extends EntityKind>(kind: K): IdOf<K> => issueId(state.registry, kind),

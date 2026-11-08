@@ -14,11 +14,16 @@ export interface TabsProps<Id extends string> {
 }
 
 /** Tab strip (caller renders the panel). Arrow keys, Home and End move between enabled tabs. */
-export function Tabs<Id extends string>({ tabs, value, onChange, ...rest }: TabsProps<Id>): ReactElement {
+export function Tabs<Id extends string>({
+  tabs,
+  value,
+  onChange,
+  ...rest
+}: TabsProps<Id>): ReactElement {
   const enabled = tabs.filter((t) => t.disabled !== true);
   const onKey = (e: KeyboardEvent): void => {
     const index = enabled.findIndex((t) => t.id === value);
-    let next = index;
+    let next: number;
     if (e.key === 'ArrowRight') next = (index + 1) % enabled.length;
     else if (e.key === 'ArrowLeft') next = (index - 1 + enabled.length) % enabled.length;
     else if (e.key === 'Home') next = 0;

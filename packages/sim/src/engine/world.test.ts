@@ -25,6 +25,7 @@ import {
   type Phase,
   type System,
 } from './system.js';
+import { restore, snapshot } from './snapshot.js';
 import { chaosSystem } from './testkit.js';
 import { createWorld, isWorldPoisoned, step, submit, type World } from './world.js';
 
@@ -254,6 +255,46 @@ describe('createWorld', () => {
     expect(order).toEqual(['accounting', 'logistics']);
     expect(world.state.logistics).toEqual({ greeting: 'hi', companies: 2 });
     expect(world.systems.map((s) => s.id)).toEqual(['core', 'accounting', 'logistics']);
+  });
+
+  it('gives services handle.scenario(), matching world.scenario after createWorld and restore', () => {
+    interface ScenarioProbe {
+      id(): string;
+      content(): unknown;
+    }
+    const KEY = createServiceKey<ScenarioProbe>('test.scenario');
+    const sys = probe(
+      'logistics',
+      {},
+      {
+        serviceKey: KEY,
+        createService: (handle): ScenarioProbe => ({
+          id: () => handle.scenario().id,
+          content: () => handle.scenario().content,
+        }),
+      },
+    );
+    const seen: { id: string; content: unknown }[] = [];
+    const reader = probe('ai', {
+      decide: (ctx) => {
+        const api = ctx.services.get(KEY);
+        seen.push({ id: api.id(), content: api.content() });
+      },
+    });
+    const systems = [sys, reader];
+    const world = createWorld({ seed: 3, scenario: VERTICAL_SLICE_SCENARIO, systems });
+    step(world);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.id).toBe(world.scenario.id);
+    expect(seen[0]?.content).toBe(world.scenario.content);
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(world))) as unknown, systems);
+    step(restored);
+    expect(restored.scenario).not.toBe(world.scenario);
+    expect(seen).toHaveLength(2);
+    expect(seen[1]?.id).toBe(restored.scenario.id);
+    expect(seen[1]?.content).toBe(restored.scenario.content);
+    expect(seen[1]?.content).toEqual(world.scenario.content);
   });
 });
 

@@ -11,7 +11,9 @@ export function matchesEventFilter(type: string, filter: EventFilter): boolean {
 }
 
 /** Filter choices from every known/seen event type: `all`, then groups, then exact types. */
-export function eventFilterOptions(types: Iterable<string>): { value: EventFilter; label: string }[] {
+export function eventFilterOptions(
+  types: Iterable<string>,
+): { value: EventFilter; label: string }[] {
   const all = [...new Set(types)].sort();
   const groups = [...new Set(all.map((t) => t.split('.')[0] ?? t))].sort();
   return [
@@ -44,7 +46,7 @@ export function summarizeEvent(e: Event): string {
   if (e.type === 'period.closed') {
     return `${e.payload.entityId} ${e.payload.kind} closed Y${String(e.payload.year)} M${String(e.payload.month)}`;
   }
-  const payload = (e as { payload?: Record<string, unknown> }).payload ?? {};
+  const payload = (e as unknown as { payload?: Record<string, unknown> }).payload ?? {};
   return Object.keys(payload)
     .sort()
     .map((k) => `${k}=${JSON.stringify(payload[k])}`)

@@ -71,8 +71,7 @@ export interface GameView {
 }
 
 export type DispatchResult =
-  | { ok: true; seq: number; executesOnTick: number }
-  | { ok: false; error: CommandValidationError };
+  { ok: true; seq: number; executesOnTick: number } | { ok: false; error: CommandValidationError };
 
 export type LoadResult = { ok: true } | { ok: false; code: string; message: string };
 
@@ -295,6 +294,7 @@ export class GameStore {
     this.eventsDirty = true;
     this.cashDirty = true;
     this.recordSeries();
+    this.refreshLastGood();
   }
 
   private markPoisoned(error: unknown): void {

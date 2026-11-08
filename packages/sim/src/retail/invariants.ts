@@ -74,7 +74,12 @@ export function checkRetailInvariants(
       const line = store.shelves[productId];
       if (line === undefined) continue;
       for (const problem of lotInvariantErrors(line.lot)) {
-        out.push({ code: 'lot.invalid', storeId, productId, message: `${storeId}/${productId}: ${problem}` });
+        out.push({
+          code: 'lot.invalid',
+          storeId,
+          productId,
+          message: `${storeId}/${productId}: ${problem}`,
+        });
       }
       if (line.shrunk > line.lot.issued) {
         out.push({
@@ -119,10 +124,7 @@ export function checkRetailInvariants(
         message: `${units} units on shelves > capacity ${format.shelfCapacity}`,
       });
     }
-    if (
-      !(store.accumulatedDepreciation >= 0) ||
-      store.accumulatedDepreciation > store.cost
-    ) {
+    if (!(store.accumulatedDepreciation >= 0) || store.accumulatedDepreciation > store.cost) {
       out.push({
         code: 'store.depreciation_out_of_range',
         storeId,
@@ -168,7 +170,7 @@ export function ppeOfStores(
   let accumulated = money(0);
   for (const storeId of sortedKeys(state.retail.stores)) {
     const store = state.retail.stores[storeId];
-    if (store === undefined || store.ownerId !== ownerId) continue;
+    if (store?.ownerId !== ownerId) continue;
     cost = money(cost + store.cost);
     accumulated = money(accumulated + store.accumulatedDepreciation);
   }

@@ -1,0 +1,73 @@
+/*
+ * Design tokens. 8px grid (4px for hairlines), one accent, semantic colours for sign only.
+ * Light by default; dark follows the OS. Money and quantities use the tabular monospace face.
+ */
+:root {
+  color-scheme: light dark;
+
+  --bg: #f3f4f7;
+  --surface: #ffffff;
+  --surface-2: #eceef3;
+  --surface-3: #e2e5ec;
+  --border: #d5d9e2;
+  --border-strong: #b9bfcc;
+  --text: #171b24;
+  --text-muted: #5a6373;
+  --text-faint: #8a93a3;
+  --accent: #2455d6;
+  --accent-contrast: #ffffff;
+  --accent-soft: #e4ebfc;
+  --pos: #137a3d;
+  --neg: #bf2f27;
+  --warn: #9a5b00;
+  --alert-bg: #fdecea;
+  --focus: #2455d6;
+  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 8px 24px rgb(16 24 40 / 10%);
+
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-num:
+    ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
+
+  /* Compact type scale (px). */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+
+  --radius: 6px;
+  --header-h: 52px;
+  --nav-w: 184px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101318;
+    --surface: #181c23;
+    --surface-2: #20252e;
+    --surface-3: #2a303b;
+    --border: #2c323d;
+    --border-strong: #404858;
+    --text: #e7eaf0;
+    --text-muted: #9ba4b4;
+    --text-faint: #6f788a;
+    --accent: #7ba2ff;
+    --accent-contrast: #0b1020;
+    --accent-soft: #1f2b4a;
+    --pos: #4cc380;
+    --neg: #ff7f76;
+    --warn: #e0a24a;
+    --alert-bg: #3a1f1f;
+    --focus: #7ba2ff;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 50%);
+  }
+}

@@ -151,6 +151,8 @@ export interface ServiceHandle<S> {
   /** Current own slice (mutable). */
   slice(): S;
   state(): DeepReadonly<WorldState>;
+  /** The immutable scenario the world was created from (survives `restore`; same as `ctx.scenario`). */
+  scenario(): DeepReadonly<Scenario>;
   tick(): number;
   date(): CalendarDate;
   issueId<K extends EntityKind>(kind: K): IdOf<K>;

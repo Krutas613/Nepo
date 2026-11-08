@@ -20,13 +20,17 @@ export function emptyLot(): InventoryLot {
   return { quantity: quantity(0), value: money(0), received: quantity(0), issued: quantity(0) };
 }
 
-/** Receipt: `quantity += q; value += cost; received += q`. Throws on `q < 0` or `cost < 0`. */
+/** Receipt: `quantity += q; value += cost; received += q`. Throws on `q < 0`, `cost < 0`, or cost without units. */
 export function receiveInto(lot: InventoryLot, q: Quantity, cost: Money): void {
-  if (!(q >= 0) || !(cost >= 0)) {
-    throw new InvariantError('retail.bad_receipt', 'receipt quantity and cost must be >= 0', {
-      quantity: q,
-      cost,
-    });
+  if (!(q >= 0) || !(cost >= 0) || (q === 0 && cost > 0)) {
+    throw new InvariantError(
+      'retail.bad_receipt',
+      'receipt needs q >= 0, cost >= 0, and units for any cost',
+      {
+        quantity: q,
+        cost,
+      },
+    );
   }
   lot.quantity = quantity(lot.quantity + q);
   lot.value = addMoney(lot.value, cost);

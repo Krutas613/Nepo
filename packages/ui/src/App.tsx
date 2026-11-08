@@ -1,11 +1,20 @@
-import type { ReactElement } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
+import { GameProvider } from './sim/hooks.js';
+import { GameStore } from './sim/store.js';
+import { Shell } from './views/Shell.js';
 
-/** Placeholder shell. The `ui` agent replaces this in Milestone 1. */
+/** Owns the single `GameStore` for the page's lifetime. */
 export function App(): ReactElement {
+  const [store] = useState(() => new GameStore());
+  useEffect(() => {
+    // The store is created in state (StrictMode double-invokes effects, not initializers); pause on unmount.
+    return () => {
+      store.pause();
+    };
+  }, [store]);
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 24 }}>
-      <h1>Nepo</h1>
-      <p>Simulation UI not yet built. See BUILD_INSTRUCTIONS.md, Milestone 1.</p>
-    </main>
+    <GameProvider store={store}>
+      <Shell />
+    </GameProvider>
   );
 }

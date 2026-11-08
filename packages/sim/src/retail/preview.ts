@@ -6,6 +6,7 @@
 import { allocateMoney } from '../accounting/index.js';
 import type { DeepReadonly } from '../engine/index.js';
 import {
+  InvariantError,
   money,
   mulMoney,
   type FacilityId,
@@ -13,7 +14,6 @@ import {
   type Money,
   type ProductId,
   type Quantity,
-  type ShelfLine,
   type Store,
   type StoreStatus,
 } from '../schema/index.js';
@@ -71,7 +71,8 @@ export function storeSummary(
     .sort()
     .map((key) => {
       const productId = key as ProductId;
-      const line = store.shelves[productId] as DeepReadonly<ShelfLine>;
+      const line = store.shelves[productId];
+      if (line === undefined) throw new InvariantError('retail.no_shelf_line', productId);
       const reference = referencePrices[productId];
       return {
         productId,

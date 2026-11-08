@@ -10,7 +10,13 @@
  * restored worlds alike) through the internal `bindContent`. `receive` before the first `apply`
  * throws `InvariantError('retail.content_unbound')`.
  */
-import { createServiceKey, sortedKeys, type DeepReadonly, type ServiceHandle, type ServiceKey } from '../engine/index.js';
+import {
+  createServiceKey,
+  sortedKeys,
+  type DeepReadonly,
+  type ServiceHandle,
+  type ServiceKey,
+} from '../engine/index.js';
 import {
   InvariantError,
   err,
@@ -30,7 +36,8 @@ import {
 import { receiveInto } from './lots.js';
 import { freeCapacity, type ReadonlyStoreFormat } from './store.js';
 
-export type ReceiveErrorCode = 'unknown_store' | 'no_shelf_line' | 'over_capacity' | 'not_operating';
+export type ReceiveErrorCode =
+  'unknown_store' | 'no_shelf_line' | 'over_capacity' | 'not_operating';
 
 export interface ReceiveError {
   code: ReceiveErrorCode;
@@ -130,7 +137,7 @@ export function createRetailApi(handle: ServiceHandle<RetailState>): RetailApiIn
       const stores = view().stores;
       return sortedKeys(stores).filter((id) => {
         const s = stores[id];
-        return s !== undefined && s.ownerId === ownerId && (cityId === undefined || s.cityId === cityId);
+        return s?.ownerId === ownerId && (cityId === undefined || s.cityId === cityId);
       });
     },
     shelfQuantity(storeId, productId) {
@@ -139,7 +146,8 @@ export function createRetailApi(handle: ServiceHandle<RetailState>): RetailApiIn
     receive(storeId, productId, qty, cost) {
       // Cheap read-only rejection first, so it does not declare a mutation.
       const store = view().stores[storeId];
-      if (store === undefined) return err({ code: 'unknown_store', message: `no store ${storeId}` });
+      if (store === undefined)
+        return err({ code: 'unknown_store', message: `no store ${storeId}` });
       formatOf(store);
       return receiveGoods(handle.slice(), (s) => formatOf(s), storeId, productId, qty, cost);
     },

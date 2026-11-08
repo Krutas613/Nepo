@@ -42,7 +42,13 @@ export function DataTable<T>(props: DataTableProps<T>): ReactElement {
   const size = useElementSize(scroller, { width: 0, height: height ?? FALLBACK_VIEWPORT });
   const viewport = size.height > 0 ? size.height : (height ?? FALLBACK_VIEWPORT);
   const count = rows.length;
-  const win = computeWindow({ scrollTop, viewportHeight: viewport, rowHeight, count, overscan: OVERSCAN });
+  const win = computeWindow({
+    scrollTop,
+    viewportHeight: viewport,
+    rowHeight,
+    count,
+    overscan: OVERSCAN,
+  });
 
   const template = columns.map((c) => c.width ?? '1fr').join(' ');
   const gridStyle: CSSProperties = { gridTemplateColumns: template };
