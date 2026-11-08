@@ -94,7 +94,13 @@ export function checkEconomyInvariants(
           message: `${where}: referencePrice ${String(pm.referencePrice)}`,
         });
       }
-      const tallies = [pm.demandToday, pm.demandRemaining, pm.soldToday, pm.lastDemand, pm.lastSold];
+      const tallies = [
+        pm.demandToday,
+        pm.demandRemaining,
+        pm.soldToday,
+        pm.lastDemand,
+        pm.lastSold,
+      ];
       if (!tallies.every(isNonNegInt) || pm.offeredToday < 0 || pm.lastOffered < 0) {
         out.push({
           ...at,
@@ -125,7 +131,11 @@ export function checkEconomyInvariants(
     if (cs === undefined) continue;
     const kappaC = content?.economy.commodities[productId]?.kappa ?? MAX_KAPPA;
     if (!isFiniteNumber(cs.level) || !isFiniteNumber(cs.volumeEma)) {
-      out.push({ productId, code: 'economy.non_finite', message: `${productId}: non-finite float` });
+      out.push({
+        productId,
+        code: 'economy.non_finite',
+        message: `${productId}: non-finite float`,
+      });
       continue;
     }
     if (cs.level < 1 - kappaC - BAND_EPSILON || cs.level > 1 + kappaC + BAND_EPSILON) {

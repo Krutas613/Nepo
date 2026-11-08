@@ -60,7 +60,11 @@ const KAPPA = PRICING.kappa;
 const { lo: LO, hi: HI } = levelBounds(KAPPA);
 const MAX_STEP = maxLevelStep(PRICING.alpha, KAPPA);
 
-function newWorld(extra: readonly AnySystem[] = [], scenario: Scenario = SCENARIO, seed = 7): World {
+function newWorld(
+  extra: readonly AnySystem[] = [],
+  scenario: Scenario = SCENARIO,
+  seed = 7,
+): World {
   return createWorld({
     seed,
     scenario,
@@ -186,12 +190,17 @@ describe('stability with a scripted retail stand-in (economy.md section 9)', () 
     // Half-price seller with plenty of stock: g = 1.5, S = qty x min(1, g) = qty, which exceeds D ->
     // flooded market, level falls toward 1 - 0.75 kappa. Sells floor(D x 1.5) per day.
     const retail = scriptedRetail((_t, api) => [
-      offer(money(Math.max(1, Math.floor(api.referencePrice(MARKET, BREAD) / 2))), 4 * BREAD_DEMAND),
+      offer(
+        money(Math.max(1, Math.floor(api.referencePrice(MARKET, BREAD) / 2))),
+        4 * BREAD_DEMAND,
+      ),
     ]);
     const world = newWorld([retail]);
     const levels = runLevels(world, 200);
     expect(isMonotone(levels, 'down')).toBe(true);
-    expect(retail.log.clearings.every((c) => c.clearing.sold[0] === Math.floor(BREAD_DEMAND * 1.5))).toBe(true);
+    expect(
+      retail.log.clearings.every((c) => c.clearing.sold[0] === Math.floor(BREAD_DEMAND * 1.5)),
+    ).toBe(true);
     expect(bread(world).lastSold).toBe(Math.floor(BREAD_DEMAND * PRICING.maxCapture));
   });
 });
@@ -378,7 +387,12 @@ describe('determinism and persistence', () => {
     const a = newWorld(systems());
     for (let i = 0; i < 50; i++) step(a);
     expect(WorldStateSchema.safeParse(a.state).success).toBe(true);
-    const restored = restore(snapshot(a), [accountingSystem, economySystem, idleFinance, ...systems()]);
+    const restored = restore(snapshot(a), [
+      accountingSystem,
+      economySystem,
+      idleFinance,
+      ...systems(),
+    ]);
     expect(hashState(restored.state)).toBe(hashState(a.state));
     for (let i = 50; i < 200; i++) {
       step(a);

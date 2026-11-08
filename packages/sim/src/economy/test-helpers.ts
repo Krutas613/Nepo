@@ -28,7 +28,12 @@ import {
   type RetailState,
   type Scenario,
 } from '../schema/index.js';
-import { ECONOMY_SERVICE, type EconomyApi, type MarketClearing, type MarketOffer } from './service.js';
+import {
+  ECONOMY_SERVICE,
+  type EconomyApi,
+  type MarketClearing,
+  type MarketOffer,
+} from './service.js';
 
 export const PLAYER: CompanyId = companyId('co_000001');
 export const BREAD: ProductId = productId('bread');
@@ -95,7 +100,10 @@ export function scriptedRetail(
         const api = ctx.services.get(ECONOMY_SERVICE);
         const offers = script(ctx.tick, api, ctx);
         if (offers === null) return;
-        log.clearings.push({ tick: ctx.tick, clearing: api.clearConsumerMarket(MARKET, BREAD, offers) });
+        log.clearings.push({
+          tick: ctx.tick,
+          clearing: api.clearConsumerMarket(MARKET, BREAD, offers),
+        });
       },
     },
     log,

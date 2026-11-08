@@ -65,10 +65,14 @@ export function marketDemandOf(
   const market = content.markets[marketId];
   const demand = market?.demand.find((d) => d.product === productId);
   if (demand === undefined) {
-    throw new InvariantError('economy.unknown_market', `no demand for ${productId} in ${marketId}`, {
-      marketId,
-      productId,
-    });
+    throw new InvariantError(
+      'economy.unknown_market',
+      `no demand for ${productId} in ${marketId}`,
+      {
+        marketId,
+        productId,
+      },
+    );
   }
   return demand;
 }
@@ -138,7 +142,11 @@ export function anchorPriceOf(
   marketId: MarketId,
   productId: ProductId,
 ): Money {
-  return anchorPrice(productOf(content, productId), marketDemandOf(content, marketId, productId), macro);
+  return anchorPrice(
+    productOf(content, productId),
+    marketDemandOf(content, marketId, productId),
+    macro,
+  );
 }
 
 /** Today's baseline demand `floor(baseDailyDemand x demandIndex)`. */
@@ -303,16 +311,26 @@ export function advanceDay(
   for (const marketId of sortedKeys(state.markets)) {
     const market = state.markets[marketId];
     if (market === undefined) continue;
+    // One pass over the content market's demand lines, so the per-product lookup is O(1).
+    const demandByProduct: Partial<Record<ProductId, DeepReadonly<MarketDemand>>> = {};
+    for (const line of content.markets[marketId]?.demand ?? []) {
+      demandByProduct[line.product] = line;
+    }
     for (const productId of sortedKeys(market.products)) {
       const pm = market.products[productId];
       if (pm === undefined) continue;
-      advanceProductMarket(
-        pm,
-        productOf(content, productId),
-        marketDemandOf(content, marketId, productId),
-        state.macro,
-        pricing,
-      );
+      const demand = demandByProduct[productId];
+      if (demand === undefined) {
+        throw new InvariantError(
+          'economy.unknown_market',
+          `no demand for ${productId} in ${marketId}`,
+          {
+            marketId,
+            productId,
+          },
+        );
+      }
+      advanceProductMarket(pm, productOf(content, productId), demand, state.macro, pricing);
     }
   }
   for (const productId of sortedKeys(state.commodities)) {
@@ -353,11 +371,15 @@ export function clearConsumerMarketIn(
   const pm = productMarketOf(state, marketId, productId);
   offers.forEach((offer, i) => {
     if (offer.productId !== productId) {
-      throw new InvariantError('economy.offer_product_mismatch', `offer ${i} is for another product`, {
-        marketId,
-        productId,
-        offerProductId: offer.productId,
-      });
+      throw new InvariantError(
+        'economy.offer_product_mismatch',
+        `offer ${i} is for another product`,
+        {
+          marketId,
+          productId,
+          offerProductId: offer.productId,
+        },
+      );
     }
   });
   const demandBefore = pm.demandRemaining;

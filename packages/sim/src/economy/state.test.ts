@@ -119,7 +119,14 @@ describe('createEconomyState', () => {
     const pm = productMarketOf(createEconomyState(content, env()), MARKET, BREAD);
     expect(pm.referencePrice).toBe(300);
     expect(pm.demandToday).toBe(750);
-    expect(anchorPriceOf(content, { priceIndex: 1, policyRate: 0, demandIndex: 1, lastMonthApplied: 0 }, MARKET, BREAD)).toBe(300);
+    expect(
+      anchorPriceOf(
+        content,
+        { priceIndex: 1, policyRate: 0, demandIndex: 1, lastMonthApplied: 0 },
+        MARKET,
+        BREAD,
+      ),
+    ).toBe(300);
   });
 });
 
@@ -238,12 +245,16 @@ describe('advanceDay', () => {
       clearConsumerMarketIn(state, content, MARKET, BREAD, [
         offer(productMarketOf(state, MARKET, BREAD).referencePrice, BREAD_DEMAND),
       ]);
+      recordRawPurchase(state, GRAIN, GRAIN_SOURCE.referenceDailyVolume); // balanced: level 1
       advanceDay(state, content, calendarFromTick(t, 2000), env(t));
     }
     expect(state.macro.priceIndex).toBe(1.01);
-    // level stays 1 under balanced supply; anchor = scaleMoney(250, 1.01) = 253 (252.5 rounds up)
+    // Both levels stay at 1 under balanced volumes, so only the anchor moves:
+    // bread scaleMoney(250, 1.01) = 253 (252.5 rounds half away from zero); grain 30.3 -> 30.
+    expect(productMarketOf(state, MARKET, BREAD).level).toBe(1);
     expect(productMarketOf(state, MARKET, BREAD).referencePrice).toBe(253);
-    expect(state.commodities[GRAIN]!.unitPrice).toBe(30); // 30.3 rounds to 30
+    expect(state.commodities[GRAIN]!.level).toBe(1);
+    expect(state.commodities[GRAIN]!.unitPrice).toBe(30);
   });
 });
 
@@ -286,7 +297,9 @@ describe('clearConsumerMarketIn', () => {
   it('a seller at 1 + 1/eps of reference sells nothing; a cheaper seller sells more than D (demandRemaining floors at 0)', () => {
     const state = createEconomyState(M1_CONTENT_PACK, env());
     const dead = money(Math.ceil(BREAD_BASE_PRICE * (1 + 1 / BREAD_ELASTICITY)));
-    expect(clearConsumerMarketIn(state, M1_CONTENT_PACK, MARKET, BREAD, [offer(dead, 1000)]).sold).toEqual([0]);
+    expect(
+      clearConsumerMarketIn(state, M1_CONTENT_PACK, MARKET, BREAD, [offer(dead, 1000)]).sold,
+    ).toEqual([0]);
     expect(productMarketOf(state, MARKET, BREAD).demandRemaining).toBe(BREAD_DEMAND);
     const cheap = clearConsumerMarketIn(state, M1_CONTENT_PACK, MARKET, BREAD, [
       offer(money(BREAD_BASE_PRICE / 2), 10_000),
@@ -302,7 +315,9 @@ describe('clearConsumerMarketIn', () => {
       const price = money(p);
       const preview = expectedCaptureFor(state, M1_CONTENT_PACK, MARKET, BREAD, price);
       const fresh = createEconomyState(M1_CONTENT_PACK, env());
-      const actual = clearConsumerMarketIn(fresh, M1_CONTENT_PACK, MARKET, BREAD, [offer(price, 100_000)]);
+      const actual = clearConsumerMarketIn(fresh, M1_CONTENT_PACK, MARKET, BREAD, [
+        offer(price, 100_000),
+      ]);
       expect(preview).toBe(actual.sold[0]);
     }
   });
@@ -332,7 +347,12 @@ describe('quotes and lookups', () => {
   it('quoteRaw total === mulMoney(unitPrice, q); recordRawPurchase tallies the volume', () => {
     const state = createEconomyState(M1_CONTENT_PACK, env());
     const q = quoteRawFrom(state, GRAIN, quantity(123));
-    expect(q).toEqual({ productId: GRAIN, quantity: 123, unitPrice: GRAIN_BASE_PRICE, total: 123 * GRAIN_BASE_PRICE });
+    expect(q).toEqual({
+      productId: GRAIN,
+      quantity: 123,
+      unitPrice: GRAIN_BASE_PRICE,
+      total: 123 * GRAIN_BASE_PRICE,
+    });
     expect(recordRawPurchase(state, GRAIN, quantity(10))).toEqual({
       productId: GRAIN,
       quantity: 10,

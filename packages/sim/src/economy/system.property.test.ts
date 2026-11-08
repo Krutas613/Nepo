@@ -49,44 +49,48 @@ const noop = { emit: () => undefined };
 describe('economy sweep property', () => {
   it('random offer books and purchases keep every invariant and |Δlevel| <= 2 alpha kappa', () => {
     fc.assert(
-      fc.property(tunablesArb, fc.array(dayArb, { minLength: 1, maxLength: 120 }), (pricing, days) => {
-        const content: ContentPack = {
-          ...M1_CONTENT_PACK,
-          economy: { ...M1_CONTENT_PACK.economy, pricing },
-        };
-        const state = createEconomyState(content, { tick: 0, ...noop });
-        const maxStep = maxLevelStep(pricing.alpha, pricing.kappa);
-        const maxStepC = maxLevelStep(GRAIN_SOURCE.alpha, GRAIN_SOURCE.kappa);
-        days.forEach((day, i) => {
-          const tick = i + 1;
-          const offers = day.offers.map((o) => offer(money(o.price), o.quantity));
-          const pm = productMarketOf(state, MARKET, BREAD);
-          const before = { ...pm };
-          const first = clearConsumerMarketIn(state, content, MARKET, BREAD, offers);
-          expect(first.demandBefore).toBe(before.demandRemaining);
-          expect(first.demandAfter).toBe(pm.demandRemaining);
-          if (day.clearTwice) {
-            const second = clearConsumerMarketIn(state, content, MARKET, BREAD, offers);
-            expect(second.demandBefore).toBe(first.demandAfter);
-            expect(second.demandAfter).toBeLessThanOrEqual(second.demandBefore);
-          }
-          if (day.rawPurchase > 0) recordRawPurchase(state, GRAIN, quantity(day.rawPurchase));
-          expect(checkEconomyInvariants({ economy: state }, content)).toEqual([]);
+      fc.property(
+        tunablesArb,
+        fc.array(dayArb, { minLength: 1, maxLength: 120 }),
+        (pricing, days) => {
+          const content: ContentPack = {
+            ...M1_CONTENT_PACK,
+            economy: { ...M1_CONTENT_PACK.economy, pricing },
+          };
+          const state = createEconomyState(content, { tick: 0, ...noop });
+          const maxStep = maxLevelStep(pricing.alpha, pricing.kappa);
+          const maxStepC = maxLevelStep(GRAIN_SOURCE.alpha, GRAIN_SOURCE.kappa);
+          days.forEach((day, i) => {
+            const tick = i + 1;
+            const offers = day.offers.map((o) => offer(money(o.price), o.quantity));
+            const pm = productMarketOf(state, MARKET, BREAD);
+            const before = { ...pm };
+            const first = clearConsumerMarketIn(state, content, MARKET, BREAD, offers);
+            expect(first.demandBefore).toBe(before.demandRemaining);
+            expect(first.demandAfter).toBe(pm.demandRemaining);
+            if (day.clearTwice) {
+              const second = clearConsumerMarketIn(state, content, MARKET, BREAD, offers);
+              expect(second.demandBefore).toBe(first.demandAfter);
+              expect(second.demandAfter).toBeLessThanOrEqual(second.demandBefore);
+            }
+            if (day.rawPurchase > 0) recordRawPurchase(state, GRAIN, quantity(day.rawPurchase));
+            expect(checkEconomyInvariants({ economy: state }, content)).toEqual([]);
 
-          const levelBefore = pm.level;
-          const levelBeforeC = state.commodities[GRAIN]!.level;
-          advanceDay(state, content, calendarFromTick(tick, 2000), { tick, ...noop });
-          expect(checkEconomyInvariants({ economy: state }, content)).toEqual([]);
-          expect(Math.abs(pm.level - levelBefore)).toBeLessThanOrEqual(maxStep + 1e-12);
-          expect(Math.abs(state.commodities[GRAIN]!.level - levelBeforeC)).toBeLessThanOrEqual(
-            maxStepC + 1e-12,
-          );
-          expect(pm.demandRemaining).toBe(pm.demandToday);
-          expect(pm.offeredToday).toBe(0);
-          expect(pm.soldToday).toBe(0);
-          expect(pm.referencePrice).toBeGreaterThanOrEqual(1);
-        });
-      }),
+            const levelBefore = pm.level;
+            const levelBeforeC = state.commodities[GRAIN]!.level;
+            advanceDay(state, content, calendarFromTick(tick, 2000), { tick, ...noop });
+            expect(checkEconomyInvariants({ economy: state }, content)).toEqual([]);
+            expect(Math.abs(pm.level - levelBefore)).toBeLessThanOrEqual(maxStep + 1e-12);
+            expect(Math.abs(state.commodities[GRAIN]!.level - levelBeforeC)).toBeLessThanOrEqual(
+              maxStepC + 1e-12,
+            );
+            expect(pm.demandRemaining).toBe(pm.demandToday);
+            expect(pm.offeredToday).toBe(0);
+            expect(pm.soldToday).toBe(0);
+            expect(pm.referencePrice).toBeGreaterThanOrEqual(1);
+          });
+        },
+      ),
       { numRuns: 150 },
     );
   });

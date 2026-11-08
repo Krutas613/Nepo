@@ -89,7 +89,13 @@ describe('price level stability (property)', () => {
     const slowRateArb = fc.double({ min: 0.01, max: 0.999, noNaN: true, noDefaultInfinity: true });
     fc.assert(
       fc.property(
-        fc.record({ alpha: slowRateArb, beta: slowRateArb, kappa: kappaArb, u: unitArb, ema0: unitArb }),
+        fc.record({
+          alpha: slowRateArb,
+          beta: slowRateArb,
+          kappa: kappaArb,
+          u: unitArb,
+          ema0: unitArb,
+        }),
         unitArb,
         (p, x) => {
           let level = 1 + p.kappa * p.u;
