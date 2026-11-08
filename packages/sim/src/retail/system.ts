@@ -43,12 +43,7 @@ import {
   validateSetRestockPolicy,
   type Rejection,
 } from './commands.js';
-import {
-  RETAIL_SERVICE,
-  createRetailApi,
-  type RetailApi,
-  type RetailApiInternal,
-} from './service.js';
+import { RETAIL_SERVICE, createRetailApi, type RetailApi } from './service.js';
 import {
   buildOffer,
   createStore,
@@ -382,10 +377,6 @@ function closeStoreDay(ctx: Ctx, store: Store, svc: Services): void {
   }
 }
 
-function bindContent(ctx: Ctx): void {
-  (ctx.services.get(RETAIL_SERVICE) as RetailApiInternal).bindContent(ctx.scenario.content);
-}
-
 export const retailSystem: System<RetailState> = {
   id: 'retail',
   handles: ['store.build', 'store.set_price', 'store.set_restock_policy'],
@@ -394,13 +385,11 @@ export const retailSystem: System<RetailState> = {
   },
   phases: {
     apply(ctx) {
-      bindContent(ctx);
       if (ctx.commands.length === 0) return;
       const svc = servicesOf(ctx);
       for (const command of ctx.commands) applyCommand(ctx, command, svc);
     },
     market(ctx) {
-      bindContent(ctx);
       const svc = servicesOf(ctx);
       const ids = sortedKeys(ctx.slice.stores);
       for (const id of ids) {

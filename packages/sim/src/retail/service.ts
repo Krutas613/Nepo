@@ -3,12 +3,6 @@
  *
  * Ownership rule (ARCHITECTURE.md section 6.2): `handle.slice()` is a mutation declaration, so only
  * `receive` calls it; every read goes through `handle.state().retail`.
- *
- * Content binding: `receive` needs the store format's shelf capacity, and `ServiceHandle` has no
- * scenario accessor. Like the economy service, the retail system binds the immutable content at the
- * start of every `apply` phase (which precedes `logistics` and `market` on every tick, on fresh and
- * restored worlds alike) through the internal `bindContent`. `receive` before the first `apply`
- * throws `InvariantError('retail.content_unbound')`.
  */
 import {
   createServiceKey,
@@ -24,7 +18,6 @@ import {
   quantity,
   type CityId,
   type CompanyId,
-  type ContentPack,
   type Money,
   type ProductId,
   type Quantity,
@@ -70,11 +63,6 @@ export interface RetailApi {
   ): Result<Quantity, ReceiveError>;
 }
 
-/** Internal surface the retail system uses on its own service; not exported from the barrel. */
-export interface RetailApiInternal extends RetailApi {
-  bindContent(content: DeepReadonly<ContentPack>): void;
-}
-
 export const RETAIL_SERVICE: ServiceKey<RetailApi> = createServiceKey<RetailApi>('retail');
 
 /**
@@ -109,17 +97,10 @@ export function receiveGoods(
   return ok(quantity(qty));
 }
 
-export function createRetailApi(handle: ServiceHandle<RetailState>): RetailApiInternal {
-  let bound: DeepReadonly<ContentPack> | null = null;
+export function createRetailApi(handle: ServiceHandle<RetailState>): RetailApi {
   const view = (): DeepReadonly<RetailState> => handle.state().retail;
   const formatOf = (store: DeepReadonly<Store>): ReadonlyStoreFormat => {
-    if (bound === null) {
-      throw new InvariantError(
-        'retail.content_unbound',
-        'RetailApi.receive used before the first apply phase bound the scenario content',
-      );
-    }
-    const format = bound.storeFormats[store.formatId];
+    const format = handle.scenario().content.storeFormats[store.formatId];
     if (format === undefined) {
       throw new InvariantError('retail.unknown_format', `no store format ${store.formatId}`);
     }
@@ -127,9 +108,6 @@ export function createRetailApi(handle: ServiceHandle<RetailState>): RetailApiIn
   };
 
   return {
-    bindContent(content) {
-      bound = content;
-    },
     store(storeId) {
       return view().stores[storeId] ?? null;
     },

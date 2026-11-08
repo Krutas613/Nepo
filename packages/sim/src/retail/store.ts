@@ -3,11 +3,11 @@
  * offers, sale settlement, shrinkage and depreciation over plain inputs. Nothing here touches the
  * engine, accounting or other systems; `system.ts` wires these functions to the services.
  */
+import { allocateMoney } from '../accounting/index.js';
 import type { MarketOffer } from '../economy/index.js';
 import type { DeepReadonly } from '../engine/index.js';
 import {
   InvariantError,
-  minMoney,
   mulMoney,
   money,
   quantity,
@@ -182,20 +182,22 @@ export function applyShrinkage(line: ShelfLine, perMille: number): ShrinkResult 
 }
 
 /**
- * Straight-line charge for this month end (ADR-009): `min(ceil(cost / usefulLifeMonths), cost -
- * accumulated)`, never negative. Rounding the monthly charge UP (in exact integer arithmetic)
- * guarantees the asset is fully depreciated within `usefulLifeMonths` charges and never over; the
- * facilities' round-to-nearest rule can leave a residue (e.g. 1000 over 12 months charges 83 x 12 =
- * 996).
+ * Straight-line charge for this month end (ADR-009), identical to manufacturing's schedule: the
+ * schedule is `allocateMoney(cost, [1 x life])` (exactly `life` charges, parts differ by at most one
+ * minor unit and sum to `cost`). The charge brings `accumulated` to the next schedule boundary above
+ * it, so no month counter is needed. Returns 0 once `accumulated >= cost`.
  */
 export function depreciationCharge(
   cost: Money,
   accumulated: Money,
   usefulLifeMonths: number,
 ): Money {
-  const remaining = subMoney(cost, accumulated);
-  if (remaining <= 0) return money(0);
-  const wholeMonths = (cost - (cost % usefulLifeMonths)) / usefulLifeMonths;
-  const perMonth = money(wholeMonths + (cost % usefulLifeMonths > 0 ? 1 : 0));
-  return minMoney(perMonth, remaining);
+  if (accumulated >= cost || cost <= 0) return money(0);
+  const parts = allocateMoney(cost, new Array<number>(usefulLifeMonths).fill(1));
+  let cumulative = money(0);
+  for (const part of parts) {
+    cumulative = addMoney(cumulative, part);
+    if (cumulative > accumulated) return subMoney(cumulative, accumulated);
+  }
+  return subMoney(cost, accumulated);
 }
