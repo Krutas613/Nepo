@@ -11,7 +11,6 @@
  * from the scenario's macro tunables (`policyRateOf`). No RNG is used.
  */
 import { ACCOUNTING_SERVICE } from '../accounting/index.js';
-import { ECONOMY_SERVICE } from '../economy/index.js';
 import { sortedKeys, type System, type TickContext } from '../engine/index.js';
 import type { FinanceState } from '../schema/index.js';
 import {
@@ -21,7 +20,7 @@ import {
   runFinanceDay,
   type FinanceEnv,
 } from './loans.js';
-import { FINANCE_SERVICE, createFinanceApi, type FinanceApiInternal } from './service.js';
+import { FINANCE_SERVICE, createFinanceApi, policyRateOf } from './service.js';
 
 function envOf(ctx: TickContext<FinanceState>): FinanceEnv {
   return {
@@ -34,19 +33,6 @@ function envOf(ctx: TickContext<FinanceState>): FinanceEnv {
   };
 }
 
-function policyRate(ctx: TickContext<FinanceState>): number {
-  return ctx.services.has(ECONOMY_SERVICE)
-    ? ctx.services.get(ECONOMY_SERVICE).policyRate()
-    : ctx.scenario.content.economy.macro.policyRate;
-}
-
-function bindService(ctx: TickContext<FinanceState>): void {
-  (ctx.services.get(FINANCE_SERVICE) as FinanceApiInternal).bind(
-    ctx.scenario.content,
-    ctx.services.has(ECONOMY_SERVICE),
-  );
-}
-
 export const financeSystem: System<FinanceState> = {
   id: 'finance',
   handles: ['loan.request', 'loan.repay'],
@@ -55,7 +41,6 @@ export const financeSystem: System<FinanceState> = {
   },
   phases: {
     apply(ctx) {
-      bindService(ctx);
       if (ctx.commands.length === 0) return;
       const env = envOf(ctx);
       for (const command of ctx.commands) {
@@ -65,7 +50,7 @@ export const financeSystem: System<FinanceState> = {
               ctx.slice,
               env,
               ctx.scenario.content,
-              policyRate(ctx),
+              policyRateOf(ctx.services, ctx.scenario.content),
               command.issuer,
               command.payload,
             );
@@ -90,7 +75,6 @@ export const financeSystem: System<FinanceState> = {
       }
     },
     finance(ctx) {
-      bindService(ctx);
       runFinanceDay(
         ctx.slice,
         envOf(ctx),

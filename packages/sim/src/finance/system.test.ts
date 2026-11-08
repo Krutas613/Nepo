@@ -7,6 +7,7 @@ import {
   getBalance,
 } from '../accounting/index.js';
 import {
+  createServiceKey,
   createWorld,
   hashState,
   restore,
@@ -36,18 +37,20 @@ import { financeSystem } from './system.js';
 import { BANK, PLAYER, RIVAL, cashScriptSystem, type CashScript } from './test-helpers.js';
 
 /**
- * Probe (id `ai`, an untyped slice): its `init` runs after finance's (SYSTEM_ORDER), so it can hand
- * the test the world's service registry, the way a UI adapter would hold `FinanceApi`.
+ * Probe (id `ai`, an untyped slice): its `createService` hands the test the world's live service
+ * registry (also after `restore`, which skips `init`), the way a UI adapter would hold `FinanceApi`.
  */
 function probeSystem(sink: { services: ServiceRegistry | null }): AnySystem {
   return {
     id: 'ai',
     handles: [],
-    init: (ctx) => {
-      sink.services = ctx.services;
+    init: () => ({}),
+    phases: {},
+    createService: (handle) => {
+      sink.services = handle.services;
       return {};
     },
-    phases: {},
+    serviceKey: createServiceKey<unknown>('finance-test-probe'),
   };
 }
 
@@ -119,13 +122,15 @@ describe('financeSystem init and service', () => {
     });
   });
 
-  it('FinanceApi: reads work at once; quotes need content bound by the first phase', () => {
+  it('FinanceApi: reads and quotes work at once, before the first step', () => {
     const { world, api } = build();
     expect(api.loansOf(PLAYER)).toEqual([]);
     expect(api.credit(PLAYER)?.overdrawnSince).toBeNull();
     expect(api.credit(RIVAL)).toBeNull();
     expect(api.totalDebt(PLAYER)).toBe(0);
-    expect(() => api.availableCredit(PLAYER)).toThrow(/finance.content_unbound/);
+    expect(api.availableCredit(PLAYER)).toBe(50_000_000);
+    const before = api.quoteLoan(PLAYER, money(30_000_000), 24);
+    expect(before.ok && before.value.annualRate).toBe(0.075);
     run(world, 1);
     expect(api.availableCredit(PLAYER)).toBe(50_000_000);
     const quote = api.quoteLoan(PLAYER, money(30_000_000), 24);
@@ -319,7 +324,7 @@ describe('determinism', () => {
     const full = build(VERTICAL_SLICE_SCENARIO, script).world;
     const expected = hashes(full, 300);
 
-    const first = build(VERTICAL_SLICE_SCENARIO, script).world;
+    const { world: first, api: firstApi } = build(VERTICAL_SLICE_SCENARIO, script);
     const head = hashes(first, 137);
     const snap = JSON.parse(JSON.stringify(snapshot(first))) as unknown;
     const sink: { services: ServiceRegistry | null } = { services: null };
@@ -329,6 +334,12 @@ describe('determinism', () => {
       probeSystem(sink),
       cashScriptSystem(script),
     ]);
+    // Quotes work on the restored world before its first step and match the original's.
+    const restoredApi = sink.services?.get(FINANCE_SERVICE);
+    expect(restoredApi?.quoteLoan(PLAYER, money(1_000_000), 12)).toEqual(
+      firstApi.quoteLoan(PLAYER, money(1_000_000), 12),
+    );
+    expect(restoredApi?.availableCredit(PLAYER)).toBe(firstApi.availableCredit(PLAYER));
     const tail = hashes(restored, 300);
     expect([...head, ...tail]).toEqual(expected);
     expect(restored.state.finance).toEqual(full.state.finance);

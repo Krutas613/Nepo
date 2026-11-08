@@ -345,7 +345,8 @@ describe('service rules (ARCHITECTURE.md section 6.2)', () => {
     step(newWorld([probe]));
   });
 
-  it('content-dependent writes before the first macro phase throw economy.content_unbound', () => {
+  it('content-dependent methods work before the first macro phase (content via handle.scenario())', () => {
+    let calls = 0;
     const early: System<Record<string, never>> = {
       id: 'logistics',
       handles: [],
@@ -353,16 +354,24 @@ describe('service rules (ARCHITECTURE.md section 6.2)', () => {
       phases: {
         apply(ctx) {
           if (ctx.tick > 0) return;
+          calls += 1;
           const api = ctx.services.get(ECONOMY_SERVICE);
-          expect(api.referencePrice(MARKET, BREAD)).toBe(BREAD_BASE_PRICE); // reads work
-          expect(() => api.clearConsumerMarket(MARKET, BREAD, [])).toThrow(
-            /economy.content_unbound/,
+          expect(api.referencePrice(MARKET, BREAD)).toBe(BREAD_BASE_PRICE);
+          // Below reference: more than the remaining demand is never captured; above: strictly less.
+          expect(api.expectedCapture(MARKET, BREAD, BREAD_BASE_PRICE)).toBe(BREAD_DEMAND);
+          expect(api.expectedCapture(MARKET, BREAD, money(BREAD_BASE_PRICE * 2))).toBeLessThan(
+            BREAD_DEMAND,
           );
+          const clearing = api.clearConsumerMarket(MARKET, BREAD, []);
+          expect(clearing.sold).toEqual([]);
+          expect(clearing.demandBefore).toBe(BREAD_DEMAND);
+          expect(clearing.demandAfter).toBe(BREAD_DEMAND);
         },
       },
     };
     const world = newWorld([early]);
     expect(() => step(world)).not.toThrow();
+    expect(calls).toBe(1);
   });
 });
 

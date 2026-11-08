@@ -4,18 +4,13 @@
  * Ownership rule (ARCHITECTURE.md section 6.2): `handle.slice()` is a mutation declaration, so only
  * `clearConsumerMarket` and `buyRaw` call it; every read goes through `handle.state().economy`.
  *
- * Content binding: the demand response needs the product's elasticity and `pricing.maxCapture`
- * from `scenario.content`, which the engine's `ServiceHandle` does not expose (it has no
- * `scenario()`), and the design forbids copying content into the slice. Until the engine adds
- * `ServiceHandle.scenario()`, the economy system binds the immutable content into the service at
- * the start of every `macro` phase through the internal `bindContent` method (the phase runs before
- * any `production`/`market` caller, on fresh and on restored worlds alike). Content-dependent
- * methods called before the first `macro` throw `InvariantError('economy.content_unbound')`; the
- * UI/AI preview path uses the pure `expectedCaptureFor(state, content, ...)` instead.
+ * Content: the demand response needs the product's elasticity and `pricing.maxCapture` from
+ * `scenario.content`, read through `handle.scenario()` (immutable, survives `restore`); the design
+ * forbids copying content into the slice. The UI/AI preview path uses the pure
+ * `expectedCaptureFor(state, content, ...)` instead of the service.
  */
 import { createServiceKey, type ServiceHandle, type ServiceKey } from '../engine/index.js';
 import {
-  InvariantError,
   type CityId,
   type CompanyId,
   type EconomyState,
@@ -99,31 +94,14 @@ export interface EconomyApi {
   buyRaw(buyerId: CompanyId, productId: ProductId, quantity: Quantity): RawQuote;
 }
 
-/** Internal surface the economy system uses on its own service; not exported from the barrel. */
-export interface EconomyApiInternal extends EconomyApi {
-  bindContent(content: ReadonlyContent): void;
-}
-
 export const ECONOMY_SERVICE: ServiceKey<EconomyApi> = createServiceKey<EconomyApi>('economy');
 
-export function createEconomyApi(handle: ServiceHandle<EconomyState>): EconomyApiInternal {
-  let bound: ReadonlyContent | null = null;
-  const content = (): ReadonlyContent => {
-    if (bound === null) {
-      throw new InvariantError(
-        'economy.content_unbound',
-        'EconomyApi used before the first macro phase bound the scenario content',
-      );
-    }
-    return bound;
-  };
+export function createEconomyApi(handle: ServiceHandle<EconomyState>): EconomyApi {
+  const content = (): ReadonlyContent => handle.scenario().content;
   /** Read-only view for queries; never `handle.slice()`. */
   const view = () => handle.state().economy;
 
   return {
-    bindContent(c) {
-      bound = c;
-    },
     policyRate() {
       return view().macro.policyRate;
     },
