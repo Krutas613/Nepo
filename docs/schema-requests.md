@@ -58,7 +58,9 @@ Only the `schema` agent edits `packages/sim/src/schema`. Every other agent reque
 - Proposal: everything in `docs/design/schema-m1.md`: `ContentPack` + `assembleContentPack` +
   `Scenario.content` (ADR-010), `InventoryLot` (ADR-012), four typed slices with `EMPTY_` constants
   and `EMPTY_TYPED_SLICES`, eight commands, twenty-five events, `BankId`, revised content types,
-  migration note v1 -> v2 (install empty slices, replacing untyped values).
+  `AccountCode` stored letter-prefixed (`'a1000'`; section 10 ruling after engine profiling, with a
+  general "no integer-like record keys" validator rule), migration note v1 -> v2 (install empty
+  slices replacing untyped values; rekey account codes in ledgers, reports and journal lines).
 - Consumers affected: engine (`MIGRATIONS[1]`, `createWorld` empty-slice install), accounting (none
   in schema; accounts/builders are its own template), all M1 domain systems, ui, sim-tests
   (regression hashes change once), tools (`validate-data` uses `assembleContentPack`).

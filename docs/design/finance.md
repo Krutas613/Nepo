@@ -16,16 +16,23 @@ Phases: **`apply`** (commands) and **`finance`** (daily overdraft check; month-e
 ## 2. Content (`data/finance/banks.json`, type `Bank`, keyed by `BankId`; M1 has exactly one)
 
 ```ts
-interface SpreadTier { maxLeverage: number; spread: number }        // ascending maxLeverage
+interface SpreadTier {
+  maxLeverage: number;
+  spread: number;
+} // ascending maxLeverage
 interface Bank {
-  id: BankId; name: string;
-  spreadTiers: SpreadTier[];      // leverage after the loan -> annual spread over policy rate; beyond the last tier: rejected
-  minEquity: Money;               // equity must be >= this after the draw (M1: > 0 in data)
-  minTermMonths: number; maxTermMonths: number;   // 1..120
-  minPrincipal: Money; maxPrincipalToEquity: number;   // principal <= equity × this
-  latePenaltySpread: number;      // added to annualRate while a loan has missed payments
-  defaultAfterMissed: number;     // consecutive missed payments -> defaulted
-  overdraftLimit: Money; overdraftAnnualRate: number;  // ADR-014
+  id: BankId;
+  name: string;
+  spreadTiers: SpreadTier[]; // leverage after the loan -> annual spread over policy rate; beyond the last tier: rejected
+  minEquity: Money; // equity must be >= this after the draw (M1: > 0 in data)
+  minTermMonths: number;
+  maxTermMonths: number; // 1..120
+  minPrincipal: Money;
+  maxPrincipalToEquity: number; // principal <= equity × this
+  latePenaltySpread: number; // added to annualRate while a loan has missed payments
+  defaultAfterMissed: number; // consecutive missed payments -> defaulted
+  overdraftLimit: Money;
+  overdraftAnnualRate: number; // ADR-014
 }
 ```
 
@@ -37,21 +44,31 @@ Suggested M1: tiers `[{0.5, 0.02}, {1.0, 0.035}, {2.0, 0.05}]`, `minEquity 1`, t
 ```ts
 type LoanStatus = 'active' | 'defaulted' | 'closed';
 interface Loan {
-  id: LoanId; borrowerId: CompanyId; bankId: BankId;
-  principal: Money; outstanding: Money;        // outstanding reconciles to 2500
-  accruedInterest: Money;                      // unpaid accrued interest, reconciles (with overdraft) to 2100
-  annualRate: number;                          // fixed at issue: policyRate + spread
-  termMonths: number; monthsRemaining: number;
-  drawnTick: number; lastAccrualTick: number;
-  missedPayments: number; consecutiveMissed: number;
+  id: LoanId;
+  borrowerId: CompanyId;
+  bankId: BankId;
+  principal: Money;
+  outstanding: Money; // outstanding reconciles to 2500
+  accruedInterest: Money; // unpaid accrued interest, reconciles (with overdraft) to 2100
+  annualRate: number; // fixed at issue: policyRate + spread
+  termMonths: number;
+  monthsRemaining: number;
+  drawnTick: number;
+  lastAccrualTick: number;
+  missedPayments: number;
+  consecutiveMissed: number;
   status: LoanStatus;
 }
 interface CreditState {
   companyId: CompanyId;
-  overdrawnSince: number | null; insolventSince: number | null;
-  overdraftAccrued: Money;                     // unpaid overdraft interest (part of 2100)
+  overdrawnSince: number | null;
+  insolventSince: number | null;
+  overdraftAccrued: Money; // unpaid overdraft interest (part of 2100)
 }
-interface FinanceState { loans: Record<LoanId, Loan>; credit: Record<CompanyId, CreditState> }
+interface FinanceState {
+  loans: Record<LoanId, Loan>;
+  credit: Record<CompanyId, CreditState>;
+}
 ```
 
 `init`: one `CreditState` per company in `sortedKeys(state.companies)`; `loans = {}`. A company that
@@ -78,10 +95,10 @@ Statements are read live from the ledger (M1); M3 ratings will read `accounting.
 
 ## 5. Commands (phase `apply`)
 
-| Type           | Payload                                 | Rejections (in order)                                                                           | Effect / event                                                                                                                                                                             |
-| -------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `loan.request` | `{ companyId, principal: Money, termMonths: number }` | `not_owner`, `no_bank` (content has no bank), then the `assessLoan` codes above                   | issue `LoanId`; post `loanDrawdown(principal)` Dr 1000 / Cr 2500 (`ref: { kind: 'loan', id }`); `Loan { outstanding = principal, accruedInterest 0, monthsRemaining = termMonths, drawnTick = lastAccrualTick = tick, status 'active' }`; emit `loan.issued` |
-| `loan.repay`   | `{ loanId, amount: Money }`             | `unknown_loan`, `not_owner`, `loan_not_active`, `invalid_amount` (amount < 1), `insufficient_cash` (cash < amount; discretionary, ADR-014) | `interestPart = min(amount, accruedInterest)`, `principalPart = min(amount − interestPart, outstanding)`; post `loanRepayment(principalPart, interestPart)`; update; if `outstanding === 0 && accruedInterest === 0`: `status = 'closed'`, emit `loan.closed`; emit `loan.repaid { loanId, principal, interest }` |
+| Type           | Payload                                               | Rejections (in order)                                                                                                                      | Effect / event                                                                                                                                                                                                                                                                                                    |
+| -------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `loan.request` | `{ companyId, principal: Money, termMonths: number }` | `not_owner`, `no_bank` (content has no bank), then the `assessLoan` codes above                                                            | issue `LoanId`; post `loanDrawdown(principal)` Dr 1000 / Cr 2500 (`ref: { kind: 'loan', id }`); `Loan { outstanding = principal, accruedInterest 0, monthsRemaining = termMonths, drawnTick = lastAccrualTick = tick, status 'active' }`; emit `loan.issued`                                                      |
+| `loan.repay`   | `{ loanId, amount: Money }`                           | `unknown_loan`, `not_owner`, `loan_not_active`, `invalid_amount` (amount < 1), `insufficient_cash` (cash < amount; discretionary, ADR-014) | `interestPart = min(amount, accruedInterest)`, `principalPart = min(amount − interestPart, outstanding)`; post `loanRepayment(principalPart, interestPart)`; update; if `outstanding === 0 && accruedInterest === 0`: `status = 'closed'`, emit `loan.closed`; emit `loan.repaid { loanId, principal, interest }` |
 
 Both are applied fully or rejected. A single company may hold several loans.
 
@@ -120,14 +137,30 @@ payment per loan per month.
 ## 7. Service (`FINANCE_SERVICE: ServiceKey<FinanceApi>`; all reads via `handle.state()`)
 
 ```ts
-type UnderwritingCode = 'no_bank' | 'invalid_term' | 'below_minimum' | 'insufficient_equity' | 'principal_too_large' | 'leverage_exceeded';
-interface LoanQuote { principal: Money; termMonths: number; annualRate: number; firstPrincipalDue: Money; leverageAfter: number }
+type UnderwritingCode =
+  | 'no_bank'
+  | 'invalid_term'
+  | 'below_minimum'
+  | 'insufficient_equity'
+  | 'principal_too_large'
+  | 'leverage_exceeded';
+interface LoanQuote {
+  principal: Money;
+  termMonths: number;
+  annualRate: number;
+  firstPrincipalDue: Money;
+  leverageAfter: number;
+}
 interface FinanceApi {
-  loansOf(companyId: CompanyId): readonly DeepReadonly<Loan>[];                         // sorted by id
+  loansOf(companyId: CompanyId): readonly DeepReadonly<Loan>[]; // sorted by id
   credit(companyId: CompanyId): DeepReadonly<CreditState> | null;
-  availableCredit(companyId: CompanyId): Money;        // largest principal accepted by assessLoan at maxTermMonths (binary search on integers, <= 60 steps)
-  quoteLoan(companyId: CompanyId, principal: Money, termMonths: number): Result<LoanQuote, { code: UnderwritingCode; message: string }>;
-  totalDebt(companyId: CompanyId): Money;             // Σ outstanding + Σ accrued (active/defaulted)
+  availableCredit(companyId: CompanyId): Money; // largest principal accepted by assessLoan at maxTermMonths (binary search on integers, <= 60 steps)
+  quoteLoan(
+    companyId: CompanyId,
+    principal: Money,
+    termMonths: number,
+  ): Result<LoanQuote, { code: UnderwritingCode; message: string }>;
+  totalDebt(companyId: CompanyId): Money; // Σ outstanding + Σ accrued (active/defaulted)
 }
 ```
 

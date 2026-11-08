@@ -17,10 +17,10 @@ Phases: **`apply`** (commands) and **`production`**. No `market` handler in M1 (
 
 ## 2. Content (`data/`)
 
-| File                       | Type           | Fields                                                                                                                                                                                                                                  |
-| -------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File                       | Type           | Fields                                                                                                                                                                                                                                               |
+| -------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `data/facility_types.json` | `FacilityType` | `id, name, kind ('farm'/'mine'/'factory'), buildCost: Money, constructionTicks: int >= 0, dailyOperatingCost: Money, capacity: Quantity >= 1 (max batches in progress), storageCapacity: Quantity >= 1 (finished units), usefulLifeMonths: int >= 1` |
-| `data/recipes.json`        | `Recipe`       | `id, name, facilityType, inputs: RecipeLine[], outputs: RecipeLine[] (>= 1), durationTicks: int >= 1, laborCostPerBatch: Money >= 0`                                                                                                   |
+| `data/recipes.json`        | `Recipe`       | `id, name, facilityType, inputs: RecipeLine[], outputs: RecipeLine[] (>= 1), durationTicks: int >= 1, laborCostPerBatch: Money >= 0`                                                                                                                 |
 
 Cross-reference: `recipe.facilityType` exists; every line's product exists; M1 content has one recipe
 whose single output has `category: 'consumer'`.
@@ -29,19 +29,34 @@ whose single output has `category: 'consumer'`.
 
 ```ts
 type FacilityStatus = 'under_construction' | 'operating';
-interface WipBatch { recipeId: RecipeId; batches: Quantity; startedTick: number; completesTick: number; value: Money }
+interface WipBatch {
+  recipeId: RecipeId;
+  batches: Quantity;
+  startedTick: number;
+  completesTick: number;
+  value: Money;
+}
 interface Facility {
-  id: FacilityId; ownerId: CompanyId; typeId: FacilityTypeId; cityId: CityId;
-  status: FacilityStatus; orderedTick: number; completesTick: number;
-  recipeId: RecipeId | null; targetBatches: Quantity;          // 0 = off
-  wip: WipBatch[];                                             // ascending completesTick, FIFO
-  inputs: Record<ProductId, InventoryLot>;                     // account 1200
-  outputs: Record<ProductId, InventoryLot>;                    // account 1210
-  cost: Money; accumulatedDepreciation: Money;                 // PP&E record for this asset
-  starvedReason: StarvedReason | null;                         // last production day's limiter (UI)
+  id: FacilityId;
+  ownerId: CompanyId;
+  typeId: FacilityTypeId;
+  cityId: CityId;
+  status: FacilityStatus;
+  orderedTick: number;
+  completesTick: number;
+  recipeId: RecipeId | null;
+  targetBatches: Quantity; // 0 = off
+  wip: WipBatch[]; // ascending completesTick, FIFO
+  inputs: Record<ProductId, InventoryLot>; // account 1200
+  outputs: Record<ProductId, InventoryLot>; // account 1210
+  cost: Money;
+  accumulatedDepreciation: Money; // PP&E record for this asset
+  starvedReason: StarvedReason | null; // last production day's limiter (UI)
 }
 type StarvedReason = 'no_recipe' | 'off' | 'capacity' | 'storage_full' | 'no_inputs' | 'no_cash';
-interface ManufacturingState { facilities: Record<FacilityId, Facility> }
+interface ManufacturingState {
+  facilities: Record<FacilityId, Facility>;
+}
 ```
 
 `InventoryLot { quantity; value; received; issued }` is the shared schema type (ADR-012). WIP value
@@ -49,11 +64,11 @@ is `Σ wip[i].value` and reconciles to account `1205`.
 
 ## 4. Commands (phase `apply`, in `ctx.commands` order)
 
-| Type                      | Payload                                                                | Rejections (in order)                                                                                                                                                  | Effect / event                                                                                                                   |
-| ------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `facility.build`          | `{ companyId, facilityTypeId, cityId }`                                | `not_owner` (companyId !== issuer), `unknown_facility_type`, `unknown_city`, `insufficient_cash` (cash < buildCost)                                                    | issue `FacilityId`; post `capex(buildCost)` Dr 1500 / Cr 1000; status `under_construction`, `completesTick = tick + constructionTicks`; emit `facility.ordered` |
-| `facility.set_recipe`     | `{ facilityId, recipeId: RecipeId \| null }`                           | `unknown_facility`, `not_owner`, `unknown_recipe`, `recipe_mismatch` (recipe.facilityType !== typeId)                                                                   | set `recipeId` (existing WIP keeps its own recipe); emit `facility.recipe_set`                                                   |
-| `facility.set_production` | `{ facilityId, targetBatches: Quantity }`                              | `unknown_facility`, `not_owner`                                                                                                                                       | `targetBatches = min(targetBatches, capacity)`; emit `facility.production_set`                                                   |
+| Type                      | Payload                                      | Rejections (in order)                                                                                               | Effect / event                                                                                                                                                  |
+| ------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `facility.build`          | `{ companyId, facilityTypeId, cityId }`      | `not_owner` (companyId !== issuer), `unknown_facility_type`, `unknown_city`, `insufficient_cash` (cash < buildCost) | issue `FacilityId`; post `capex(buildCost)` Dr 1500 / Cr 1000; status `under_construction`, `completesTick = tick + constructionTicks`; emit `facility.ordered` |
+| `facility.set_recipe`     | `{ facilityId, recipeId: RecipeId \| null }` | `unknown_facility`, `not_owner`, `unknown_recipe`, `recipe_mismatch` (recipe.facilityType !== typeId)               | set `recipeId` (existing WIP keeps its own recipe); emit `facility.recipe_set`                                                                                  |
+| `facility.set_production` | `{ facilityId, targetBatches: Quantity }`    | `unknown_facility`, `not_owner`                                                                                     | `targetBatches = min(targetBatches, capacity)`; emit `facility.production_set`                                                                                  |
 
 A command is applied fully or rejected; validation precedes every mutation and posting. Building is
 discretionary spend (ADR-014). `constructionTicks = 0` means operating from the next `production`
@@ -72,9 +87,9 @@ phase of the same tick.
 3. **Plan starts.** `recipe = content.recipes[recipeId]`; if none → `starvedReason = 'no_recipe'`, skip
    to 5. `want = min(targetBatches, capacity − Σ wip.batches)`; if `targetBatches === 0` → `'off'`.
    Storage: `pendingOut = Σ over wip of batches × outQty` (primary output), `room = storageCapacity −
-   outputs[primary].quantity − pendingOut`; `want = min(want, floor(room / outQty))` (`'storage_full'`).
+outputs[primary].quantity − pendingOut`; `want = min(want, floor(room / outQty))` (`'storage_full'`).
 4. **Buy inputs (JIT) and start.** For each input line in recipe order: `need = want × qty −
-   inputs[p].quantity`; if `need > 0`: `quote = economy.quoteRaw(p, need)`; if `quote.total > cash`
+inputs[p].quantity`; if `need > 0`: `quote = economy.quoteRaw(p, need)`; if `quote.total > cash`
    then `buyQty = floor(max(0, cash) / quote.unitPrice)` (`'no_cash'`), else `buyQty = need`; if
    `buyQty > 0`: `q = economy.buyRaw(ownerId, p, buyQty)`; post `inventoryPurchase(q.total)` Dr 1200 /
    Cr 1000; receive lot. Then `want = min(want, floor(inputs[p].quantity / qty))` over all inputs
@@ -98,14 +113,25 @@ Rounding: only `scaleMoney`/`allocateMoney`/`mulMoney`. Quantities are integers 
 ## 6. Service (`MANUFACTURING_SERVICE: ServiceKey<ManufacturingApi>`)
 
 ```ts
-type WithdrawErrorCode = 'unknown_facility' | 'not_owner' | 'unknown_product' | 'insufficient' | 'not_operating';
-interface Withdrawal { facilityId: FacilityId; productId: ProductId; quantity: Quantity; cost: Money }
+type WithdrawErrorCode =
+  'unknown_facility' | 'not_owner' | 'unknown_product' | 'insufficient' | 'not_operating';
+interface Withdrawal {
+  facilityId: FacilityId;
+  productId: ProductId;
+  quantity: Quantity;
+  cost: Money;
+}
 interface ManufacturingApi {
-  facility(facilityId: FacilityId): DeepReadonly<Facility> | null;                 // read
-  availableOutput(facilityId: FacilityId, productId: ProductId): Quantity;         // read: outputs[p].quantity or 0
-  facilitiesOf(ownerId: CompanyId, cityId?: CityId): readonly FacilityId[];        // read, sorted
-  withdraw(ownerId: CompanyId, facilityId: FacilityId, productId: ProductId, quantity: Quantity,
-           destinationAccount: AccountCode): Result<Withdrawal, { code: WithdrawErrorCode; message: string }>;
+  facility(facilityId: FacilityId): DeepReadonly<Facility> | null; // read
+  availableOutput(facilityId: FacilityId, productId: ProductId): Quantity; // read: outputs[p].quantity or 0
+  facilitiesOf(ownerId: CompanyId, cityId?: CityId): readonly FacilityId[]; // read, sorted
+  withdraw(
+    ownerId: CompanyId,
+    facilityId: FacilityId,
+    productId: ProductId,
+    quantity: Quantity,
+    destinationAccount: AccountCode,
+  ): Result<Withdrawal, { code: WithdrawErrorCode; message: string }>;
 }
 ```
 
@@ -146,7 +172,7 @@ No RNG in M1. Iteration via `sortedKeys` over facilities and lots; recipe lines 
 4. Per entity PP&E: `Σ facility.cost (+ Σ store.cost) === balance(1500)` and
    `Σ accumulatedDepreciation === −balance(1590)` (qa combines manufacturing and retail records).
 5. Goods conservation (invariant 4): for every output product, `Σ received === Σ completed batches ×
-   outQty` and `issued === Σ withdrawn` (checked via counters; `received − issued === quantity`).
+outQty` and `issued === Σ withdrawn` (checked via counters; `received − issued === quantity`).
 
 ## 11. Tests the owner must ship
 

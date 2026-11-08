@@ -11,7 +11,7 @@ Conventions: hand-written interfaces are the truth, each has a zod validator `sa
 ## 1. `ids.ts` (additive)
 
 ```ts
-export type BankId = Brand<string, 'BankId'>;            // authored slug
+export type BankId = Brand<string, 'BankId'>; // authored slug
 export const bankId = (s: string): BankId => s as BankId;
 export const BankIdSchema = slugSchema<BankId>();
 ```
@@ -19,46 +19,164 @@ export const BankIdSchema = slugSchema<BankId>();
 ## 2. `inventory.ts` (new, shared by manufacturing and retail; ADR-012)
 
 ```ts
-export interface InventoryLot { quantity: Quantity; value: Money; received: Quantity; issued: Quantity }
-export const InventoryLotSchema: z.ZodType<InventoryLot>;   // value >= 0; refine received - issued === quantity
-export const EMPTY_LOT: InventoryLot;                         // all zero, deep-frozen
+export interface InventoryLot {
+  quantity: Quantity;
+  value: Money;
+  received: Quantity;
+  issued: Quantity;
+}
+export const InventoryLotSchema: z.ZodType<InventoryLot>; // value >= 0; refine received - issued === quantity
+export const EMPTY_LOT: InventoryLot; // all zero, deep-frozen
 ```
 
 ## 3. `content.ts` (revised; replaces M0 `Facility`/`Store`/`MarketDemand`/`Market`)
 
 ```ts
 export type ProductCategory = 'raw' | 'intermediate' | 'consumer';
-export interface Product { id: ProductId; name: string; category: ProductCategory; unit: string; basePrice: Money /* >= 1 */; elasticity: number /* 0..5 */ }
-export interface RecipeLine { product: ProductId; quantity: Quantity /* >= 1 */ }
-export interface Recipe { id: RecipeId; name: string; facilityType: FacilityTypeId; inputs: RecipeLine[]; outputs: RecipeLine[] /* >= 1 */; durationTicks: number /* int >= 1 */; laborCostPerBatch: Money /* >= 0 */ }
-export type FacilityKind = 'farm' | 'mine' | 'factory';
-export interface FacilityType { id: FacilityTypeId; name: string; kind: FacilityKind; buildCost: Money /* >= 0 */; constructionTicks: number /* int >= 0 */; dailyOperatingCost: Money /* >= 0 */; capacity: Quantity /* >= 1 */; storageCapacity: Quantity /* >= 1 */; usefulLifeMonths: number /* int >= 1 */ }
-export interface StoreFormat { id: StoreFormatId; name: string; buildCost: Money; constructionTicks: number; dailyOperatingCost: Money; shelfCapacity: Quantity /* >= 1 */; usefulLifeMonths: number /* int >= 1 */; categories: ProductCategory[] /* >= 1 */; shrinkagePerMille: number /* int 0..100 */ }
-export interface Region { id: RegionId; name: string }
-export interface City { id: CityId; name: string; region: RegionId; population: Quantity }
-export interface MarketDemand { product: ProductId; baseDailyDemand: Quantity; priceFactor: number /* 0.1..10 */ }
-export interface Market { id: MarketId; name: string; city: CityId; demand: MarketDemand[] }
-export interface PricingTunables { alpha: number /* (0,1) */; beta: number /* (0,1) */; kappa: number /* (0,0.5] */; maxCapture: number /* [1,3] */ }
-export interface MacroTunables { inflationAnnual: number /* [-0.5,1] */; policyRate: number /* [0,1] */; demandIndex: number /* (0,10] */ }
-export interface CommoditySource { product: ProductId; referenceDailyVolume: Quantity /* >= 1 */; alpha: number /* (0,1) */; kappa: number /* (0,0.5] */ }
-export interface SpreadTier { maxLeverage: number /* > 0 */; spread: number /* >= 0 */ }
-export interface Bank { id: BankId; name: string; spreadTiers: SpreadTier[] /* >= 1, ascending maxLeverage */; minEquity: Money; minTermMonths: number; maxTermMonths: number /* 1..120, min <= max */; minPrincipal: Money /* >= 1 */; maxPrincipalToEquity: number /* > 0 */; latePenaltySpread: number /* >= 0 */; defaultAfterMissed: number /* int >= 1 */; overdraftLimit: Money /* >= 0 */; overdraftAnnualRate: number /* [0,1] */ }
-
-export interface EconomyContent { pricing: PricingTunables; macro: MacroTunables; commodities: Record<ProductId, CommoditySource> }
-export interface FinanceContent { banks: Record<BankId, Bank> }
-export interface ContentPack {
-  products: Record<ProductId, Product>; recipes: Record<RecipeId, Recipe>;
-  facilityTypes: Record<FacilityTypeId, FacilityType>; storeFormats: Record<StoreFormatId, StoreFormat>;
-  regions: Record<RegionId, Region>; cities: Record<CityId, City>; markets: Record<MarketId, Market>;
-  economy: EconomyContent; finance: FinanceContent;
+export interface Product {
+  id: ProductId;
+  name: string;
+  category: ProductCategory;
+  unit: string;
+  basePrice: Money /* >= 1 */;
+  elasticity: number; /* 0..5 */
 }
-export const EMPTY_CONTENT_PACK: ContentPack;   // empty records; pricing {0.05,0.25,0.3,1.5}; macro {0,0.04,1}; deep-frozen
-export const ContentPackSchema: z.ZodType<ContentPack>;   // key === id refinements + cross-references (below)
+export interface RecipeLine {
+  product: ProductId;
+  quantity: Quantity; /* >= 1 */
+}
+export interface Recipe {
+  id: RecipeId;
+  name: string;
+  facilityType: FacilityTypeId;
+  inputs: RecipeLine[];
+  outputs: RecipeLine[] /* >= 1 */;
+  durationTicks: number /* int >= 1 */;
+  laborCostPerBatch: Money; /* >= 0 */
+}
+export type FacilityKind = 'farm' | 'mine' | 'factory';
+export interface FacilityType {
+  id: FacilityTypeId;
+  name: string;
+  kind: FacilityKind;
+  buildCost: Money /* >= 0 */;
+  constructionTicks: number /* int >= 0 */;
+  dailyOperatingCost: Money /* >= 0 */;
+  capacity: Quantity /* >= 1 */;
+  storageCapacity: Quantity /* >= 1 */;
+  usefulLifeMonths: number; /* int >= 1 */
+}
+export interface StoreFormat {
+  id: StoreFormatId;
+  name: string;
+  buildCost: Money;
+  constructionTicks: number;
+  dailyOperatingCost: Money;
+  shelfCapacity: Quantity /* >= 1 */;
+  usefulLifeMonths: number /* int >= 1 */;
+  categories: ProductCategory[] /* >= 1 */;
+  shrinkagePerMille: number; /* int 0..100 */
+}
+export interface Region {
+  id: RegionId;
+  name: string;
+}
+export interface City {
+  id: CityId;
+  name: string;
+  region: RegionId;
+  population: Quantity;
+}
+export interface MarketDemand {
+  product: ProductId;
+  baseDailyDemand: Quantity;
+  priceFactor: number; /* 0.1..10 */
+}
+export interface Market {
+  id: MarketId;
+  name: string;
+  city: CityId;
+  demand: MarketDemand[];
+}
+export interface PricingTunables {
+  alpha: number /* (0,1) */;
+  beta: number /* (0,1) */;
+  kappa: number /* (0,0.5] */;
+  maxCapture: number; /* [1,3] */
+}
+export interface MacroTunables {
+  inflationAnnual: number /* [-0.5,1] */;
+  policyRate: number /* [0,1] */;
+  demandIndex: number; /* (0,10] */
+}
+export interface CommoditySource {
+  product: ProductId;
+  referenceDailyVolume: Quantity /* >= 1 */;
+  alpha: number /* (0,1) */;
+  kappa: number; /* (0,0.5] */
+}
+export interface SpreadTier {
+  maxLeverage: number /* > 0 */;
+  spread: number; /* >= 0 */
+}
+export interface Bank {
+  id: BankId;
+  name: string;
+  spreadTiers: SpreadTier[] /* >= 1, ascending maxLeverage */;
+  minEquity: Money;
+  minTermMonths: number;
+  maxTermMonths: number /* 1..120, min <= max */;
+  minPrincipal: Money /* >= 1 */;
+  maxPrincipalToEquity: number /* > 0 */;
+  latePenaltySpread: number /* >= 0 */;
+  defaultAfterMissed: number /* int >= 1 */;
+  overdraftLimit: Money /* >= 0 */;
+  overdraftAnnualRate: number; /* [0,1] */
+}
+
+export interface EconomyContent {
+  pricing: PricingTunables;
+  macro: MacroTunables;
+  commodities: Record<ProductId, CommoditySource>;
+}
+export interface FinanceContent {
+  banks: Record<BankId, Bank>;
+}
+export interface ContentPack {
+  products: Record<ProductId, Product>;
+  recipes: Record<RecipeId, Recipe>;
+  facilityTypes: Record<FacilityTypeId, FacilityType>;
+  storeFormats: Record<StoreFormatId, StoreFormat>;
+  regions: Record<RegionId, Region>;
+  cities: Record<CityId, City>;
+  markets: Record<MarketId, Market>;
+  economy: EconomyContent;
+  finance: FinanceContent;
+}
+export const EMPTY_CONTENT_PACK: ContentPack; // empty records; pricing {0.05,0.25,0.3,1.5}; macro {0,0.04,1}; deep-frozen
+export const ContentPackSchema: z.ZodType<ContentPack>; // key === id refinements + cross-references (below)
 
 /** Raw parsed JSON of each data/ file (arrays / objects as authored). */
-export interface ContentFiles { products: unknown; recipes: unknown; facilityTypes: unknown; storeFormats: unknown; regions: unknown; cities: unknown; markets: unknown; pricing: unknown; macro: unknown; commodities: unknown; banks: unknown }
-export interface ContentValidationError { code: 'invalid_shape' | 'duplicate_id' | 'cross_reference'; issues: string[] }
-export function assembleContentPack(files: ContentFiles): Result<ContentPack, ContentValidationError>;
+export interface ContentFiles {
+  products: unknown;
+  recipes: unknown;
+  facilityTypes: unknown;
+  storeFormats: unknown;
+  regions: unknown;
+  cities: unknown;
+  markets: unknown;
+  pricing: unknown;
+  macro: unknown;
+  commodities: unknown;
+  banks: unknown;
+}
+export interface ContentValidationError {
+  code: 'invalid_shape' | 'duplicate_id' | 'cross_reference';
+  issues: string[];
+}
+export function assembleContentPack(
+  files: ContentFiles,
+): Result<ContentPack, ContentValidationError>;
 ```
 
 Cross-reference rules in `ContentPackSchema` (and thus `assembleContentPack`): recipe
@@ -71,8 +189,19 @@ every `CommoditySource.product` exists and is `raw`; every `raw` product has exa
 ## 4. `scenario.ts` (breaking in TS, compatible on the wire; ADR-010)
 
 ```ts
-export interface ScenarioCompany { name: string; controller: ScenarioController; startingCash: Money; homeCity?: CityId }
-export interface Scenario { id: string; name: string; epochYear: number; companies: ScenarioCompany[]; content: ContentPack }
+export interface ScenarioCompany {
+  name: string;
+  controller: ScenarioController;
+  startingCash: Money;
+  homeCity?: CityId;
+}
+export interface Scenario {
+  id: string;
+  name: string;
+  epochYear: number;
+  companies: ScenarioCompany[];
+  content: ContentPack;
+}
 // ScenarioSchema: `content` defaults to EMPTY_CONTENT_PACK when absent (so v1 envelopes, fixtures and
 // data/scenarios/*.json parse); refine: every homeCity exists in content.cities.
 ```
@@ -88,7 +217,11 @@ Exactly the interfaces in `docs/design/economy.md` section 3, `manufacturing.md`
 `retail.md` section 3 and `finance.md` section 3, with these validators and empties:
 
 ```ts
-export const EMPTY_ECONOMY_STATE: EconomyState = { macro: { priceIndex: 1, policyRate: 0, demandIndex: 1, lastMonthApplied: 0 }, markets: {}, commodities: {} };
+export const EMPTY_ECONOMY_STATE: EconomyState = {
+  macro: { priceIndex: 1, policyRate: 0, demandIndex: 1, lastMonthApplied: 0 },
+  markets: {},
+  commodities: {},
+};
 export const EMPTY_MANUFACTURING_STATE: ManufacturingState = { facilities: {} };
 export const EMPTY_RETAIL_STATE: RetailState = { stores: {} };
 export const EMPTY_FINANCE_STATE: FinanceState = { loans: {}, credit: {} };
@@ -101,10 +234,16 @@ Refinements: record key === entity `id` (facilities, stores, loans, markets, cre
 ## 6. `world.ts`
 
 ```ts
-export type TypedSliceSystemId = 'core' | 'accounting' | 'economy' | 'manufacturing' | 'retail' | 'finance';
-export interface WorldState extends UntypedSlices {  /* ...core fields... */
-  companies: Record<CompanyId, Company>; accounting: AccountingState;
-  economy: EconomyState; manufacturing: ManufacturingState; retail: RetailState; finance: FinanceState;
+export type TypedSliceSystemId =
+  'core' | 'accounting' | 'economy' | 'manufacturing' | 'retail' | 'finance';
+export interface WorldState extends UntypedSlices {
+  /* ...core fields... */
+  companies: Record<CompanyId, Company>;
+  accounting: AccountingState;
+  economy: EconomyState;
+  manufacturing: ManufacturingState;
+  retail: RetailState;
+  finance: FinanceState;
 }
 /** For the engine: empty value per typed domain slice, so createWorld/migrations never hand-write shapes. */
 export const EMPTY_TYPED_SLICES: Readonly<Record<Exclude<TypedSliceSystemId, 'core'>, unknown>>;
@@ -115,15 +254,53 @@ export const EMPTY_TYPED_SLICES: Readonly<Record<Exclude<TypedSliceSystemId, 'co
 ## 7. `commands.ts` (additive members; snake_case per ARCHITECTURE 7.1)
 
 ```ts
-interface BuildFacilityCommand      extends CommandBase { type: 'facility.build';            payload: { companyId: CompanyId; facilityTypeId: FacilityTypeId; cityId: CityId } }
-interface SetRecipeCommand          extends CommandBase { type: 'facility.set_recipe';       payload: { facilityId: FacilityId; recipeId: RecipeId | null } }
-interface SetProductionCommand      extends CommandBase { type: 'facility.set_production';   payload: { facilityId: FacilityId; targetBatches: Quantity } }
-interface BuildStoreCommand         extends CommandBase { type: 'store.build';               payload: { companyId: CompanyId; storeFormatId: StoreFormatId; cityId: CityId } }
-interface SetPriceCommand           extends CommandBase { type: 'store.set_price';           payload: { storeId: StoreId; productId: ProductId; price: Money | null } }
-interface SetRestockPolicyCommand   extends CommandBase { type: 'store.set_restock_policy';  payload: { storeId: StoreId; productId: ProductId; sourceFacilityId: FacilityId | null; targetStock: Quantity } }
-interface RequestLoanCommand        extends CommandBase { type: 'loan.request';              payload: { companyId: CompanyId; principal: Money; termMonths: number } }
-interface RepayLoanCommand          extends CommandBase { type: 'loan.repay';                payload: { loanId: LoanId; amount: Money } }
-export type Command = RenameCompanyCommand | BuildFacilityCommand | SetRecipeCommand | SetProductionCommand | BuildStoreCommand | SetPriceCommand | SetRestockPolicyCommand | RequestLoanCommand | RepayLoanCommand;
+interface BuildFacilityCommand extends CommandBase {
+  type: 'facility.build';
+  payload: { companyId: CompanyId; facilityTypeId: FacilityTypeId; cityId: CityId };
+}
+interface SetRecipeCommand extends CommandBase {
+  type: 'facility.set_recipe';
+  payload: { facilityId: FacilityId; recipeId: RecipeId | null };
+}
+interface SetProductionCommand extends CommandBase {
+  type: 'facility.set_production';
+  payload: { facilityId: FacilityId; targetBatches: Quantity };
+}
+interface BuildStoreCommand extends CommandBase {
+  type: 'store.build';
+  payload: { companyId: CompanyId; storeFormatId: StoreFormatId; cityId: CityId };
+}
+interface SetPriceCommand extends CommandBase {
+  type: 'store.set_price';
+  payload: { storeId: StoreId; productId: ProductId; price: Money | null };
+}
+interface SetRestockPolicyCommand extends CommandBase {
+  type: 'store.set_restock_policy';
+  payload: {
+    storeId: StoreId;
+    productId: ProductId;
+    sourceFacilityId: FacilityId | null;
+    targetStock: Quantity;
+  };
+}
+interface RequestLoanCommand extends CommandBase {
+  type: 'loan.request';
+  payload: { companyId: CompanyId; principal: Money; termMonths: number };
+}
+interface RepayLoanCommand extends CommandBase {
+  type: 'loan.repay';
+  payload: { loanId: LoanId; amount: Money };
+}
+export type Command =
+  | RenameCompanyCommand
+  | BuildFacilityCommand
+  | SetRecipeCommand
+  | SetProductionCommand
+  | BuildStoreCommand
+  | SetPriceCommand
+  | SetRestockPolicyCommand
+  | RequestLoanCommand
+  | RepayLoanCommand;
 ```
 
 Shape validation only (`principal` any `Money`; `termMonths` int >= 1; semantics belong to handlers).
@@ -177,7 +354,51 @@ whose system is not registered (today it hand-writes `accounting` only); `restor
 require a slice per registered system. qa follow-up: regression hashes change (new state keys) and
 must be deliberately updated once, with this request cited.
 
-## 10. Scenario content (for `content`/`game-design`, not schema)
+## 10. Ruling: no integer-like record keys in state; `AccountCode` becomes letter-prefixed
+
+Context (engine profiling): records keyed by integer-like strings such as `'1000'` are stored by V8
+as sparse elements in dictionary mode; enumerating them is ~15x slower than named keys, and on the
+5-year smoke state `accounts`/`monthOpening`/`yearOpening`/`byAccount` were more than half of the
+per-tick hash cost (2.5 ms vs 0.65 ms). JS also enumerates such keys numerically regardless of
+insertion (already neutralised by `sortedKeys`/`canonicalJson`, but a trap for anyone else).
+
+**Decision: option (b), applied to the brand itself.** `AccountCode` is stored as `'a' + NNNN`
+(`'a1000'`, `'a2500'`, ...); the chart template, every `ACCOUNTS.*` constant, `LedgerAccount.code`,
+`JournalLine.account` and every record key use that single form. There is no second "key" type.
+Rationale over (a) sorted arrays: one change fixes every present and future code-keyed record
+(including both `byAccount` records in each of the 60+ reports after five years), lookups stay O(1),
+accounting's M0 code changes only in the pattern/constants, and string order of `'aNNNN'` equals
+numeric order for fixed-width codes, so "ascending code order" semantics are unchanged. Design docs
+keep writing codes as `1000` for readability; that always denotes the stored string `'a1000'`.
+
+Schema changes:
+
+```ts
+export const ACCOUNT_CODE_PATTERN = /^a[1-7][0-9]{3}$/; // was /^[0-9]{4}$/
+export const AccountCodeSchema: z.ZodType<AccountCode, string>; // regex above, then brand
+/** General rule, enforced by validators: no Record in state has an integer-like key (/^\d+$/). */
+export const RecordKeySchema = z
+  .string()
+  .regex(/^(?!\d+$)/, 'integer-like keys are forbidden in state');
+```
+
+`z.record(...)` key schemas in `world.ts`, `accounting.ts` and the M1 slices use branded key schemas
+that already exclude digit-only strings (`AccountCodeSchema`, slug and entity-id schemas); `rng` keys
+use `RecordKeySchema`. Accounting follow-up (its own template, not schema): `ACCOUNTS.CASH = accountCode('a1000')`
+etc.; `accountTypeOf` reads `code.charAt(1)`; `codeNumber` parses `code.slice(1)`; `incomeLineOf`/
+`cashFlowSectionOf` ranges unchanged on the numeric part; the UI displays `code.slice(1)`.
+qa follow-up: `/^[4-7]/` tests on codes become `/^a[4-7]/`.
+
+**Migration note v1 -> v2 (engine `MIGRATIONS[1]`, in addition to section 9):** with
+`rekey = (code: string) => (/^[0-9]{4}$/.test(code) ? 'a' + code : code)`:
+for every `ledger` in `state.accounting.entities[*]`: rebuild `accounts` as `{ [rekey(k)]: { ...acct, code: rekey(acct.code) } }`,
+`monthOpening` and `yearOpening` as `{ [rekey(k)]: v }`; for every `report` in `ledger.reports`:
+rebuild `income.byAccount` and `balance.byAccount` the same way; for every `entry` in
+`state.accounting.journal`: `entry.lines[i].account = rekey(entry.lines[i].account)`. Nothing else
+changes. The step is idempotent on already-prefixed codes. Regression hashes regenerate once for v2
+(section 9) and this is part of the same regeneration.
+
+## 11. Scenario content (for `content`/`game-design`, not schema)
 
 `data/scenarios/vertical_slice.json`: `{ id: 'vertical_slice', name: 'Vertical slice', epochYear: 2000,
 companies: [{ name: 'Player Co', controller: 'player', startingCash: 50_000_000, homeCity: '<city>' }] }`

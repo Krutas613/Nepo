@@ -18,15 +18,15 @@ commodity-exchange clearing; register no handler for it in M1. Because economy r
 
 ## 2. Content and tunables (`data/`)
 
-| File                           | Type (schema)                            | Fields                                                                                                                                                          |
-| ------------------------------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data/products.json`           | `Product[]`                              | `id, name, category, unit, basePrice: Money (>=1), elasticity: number (0..5)`                                                                                   |
-| `data/regions.json`            | `Region[]`                               | `id, name`                                                                                                                                                      |
-| `data/cities.json`             | `City[]`                                 | `id, name, region, population: Quantity`                                                                                                                        |
-| `data/markets.json`            | `Market[]`                               | `id, name, city (exactly one market per city), demand: MarketDemand[]` with `MarketDemand { product, baseDailyDemand: Quantity, priceFactor: number (0.1..10) }` |
-| `data/economy/pricing.json`    | `PricingTunables`                        | `alpha (0,1), beta (0,1), kappa (0,0.5], maxCapture [1,3]`                                                                                                      |
-| `data/economy/macro.json`      | `MacroTunables`                          | `inflationAnnual [-0.5,1], policyRate [0,1], demandIndex (0,10]`                                                                                                |
-| `data/economy/commodities.json`| `CommoditySource[]`                      | `product (category 'raw'), referenceDailyVolume: Quantity (>=1), alpha (0,1), kappa (0,0.5]`                                                                    |
+| File                            | Type (schema)       | Fields                                                                                                                                                           |
+| ------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/products.json`            | `Product[]`         | `id, name, category, unit, basePrice: Money (>=1), elasticity: number (0..5)`                                                                                    |
+| `data/regions.json`             | `Region[]`          | `id, name`                                                                                                                                                       |
+| `data/cities.json`              | `City[]`            | `id, name, region, population: Quantity`                                                                                                                         |
+| `data/markets.json`             | `Market[]`          | `id, name, city (exactly one market per city), demand: MarketDemand[]` with `MarketDemand { product, baseDailyDemand: Quantity, priceFactor: number (0.1..10) }` |
+| `data/economy/pricing.json`     | `PricingTunables`   | `alpha (0,1), beta (0,1), kappa (0,0.5], maxCapture [1,3]`                                                                                                       |
+| `data/economy/macro.json`       | `MacroTunables`     | `inflationAnnual [-0.5,1], policyRate [0,1], demandIndex (0,10]`                                                                                                 |
+| `data/economy/commodities.json` | `CommoditySource[]` | `product (category 'raw'), referenceDailyVolume: Quantity (>=1), alpha (0,1), kappa (0,0.5]`                                                                     |
 
 Cross-reference rules (in `assembleContentPack`): every `MarketDemand.product` exists and is not
 `raw`; every `raw` product has exactly one `CommoditySource`; every city has a region. Suggested M1
@@ -36,20 +36,36 @@ demandIndex 1`; commodity `alpha 0.1, kappa 0.25`. game-design tunes later.
 ## 3. State (`EconomyState`, schema)
 
 ```ts
-interface MacroState { priceIndex: number; policyRate: number; demandIndex: number; lastMonthApplied: number }
-interface ProductMarketState {
-  level: number;              // price level in [1 - kappa, 1 + kappa]
-  imbalanceEma: number;       // xbar in [-1, 1]
-  referencePrice: Money;      // today's, >= 1; = max(1, scaleMoney(anchor, level))
-  demandToday: Quantity;      // D: baseline demand at reference, fixed at open
-  demandRemaining: Quantity;  // decremented by clearings; <= demandToday
-  offeredToday: number;       // S: effective supply (float, see 4.2); >= 0
-  soldToday: Quantity;
-  lastDemand: Quantity; lastOffered: number; lastSold: Quantity;  // previous day's closed tallies (UI)
+interface MacroState {
+  priceIndex: number;
+  policyRate: number;
+  demandIndex: number;
+  lastMonthApplied: number;
 }
-interface MarketState { id: MarketId; city: CityId; region: RegionId; products: Record<ProductId, ProductMarketState> }
+interface ProductMarketState {
+  level: number; // price level in [1 - kappa, 1 + kappa]
+  imbalanceEma: number; // xbar in [-1, 1]
+  referencePrice: Money; // today's, >= 1; = max(1, scaleMoney(anchor, level))
+  demandToday: Quantity; // D: baseline demand at reference, fixed at open
+  demandRemaining: Quantity; // decremented by clearings; <= demandToday
+  offeredToday: number; // S: effective supply (float, see 4.2); >= 0
+  soldToday: Quantity;
+  lastDemand: Quantity;
+  lastOffered: number;
+  lastSold: Quantity; // previous day's closed tallies (UI)
+}
+interface MarketState {
+  id: MarketId;
+  city: CityId;
+  region: RegionId;
+  products: Record<ProductId, ProductMarketState>;
+}
 interface CommodityState {
-  level: number; volumeEma: number; unitPrice: Money; purchasedToday: Quantity; lastPurchased: Quantity;
+  level: number;
+  volumeEma: number;
+  unitPrice: Money;
+  purchasedToday: Quantity;
+  lastPurchased: Quantity;
 }
 interface EconomyState {
   macro: MacroState;
@@ -121,31 +137,42 @@ not move it), which keeps `quoteRaw` and `buyRaw` consistent within a tick.
 
 ```ts
 interface MarketOffer {
-  sellerId: CompanyId; storeId: StoreId; productId: ProductId;
-  price: Money;        // >= 1
-  quantity: Quantity;  // units on offer today (stock on shelf)
-  quality: number;     // placeholder, 0 in M1
-  brand: number;       // placeholder, 0 in M1
+  sellerId: CompanyId;
+  storeId: StoreId;
+  productId: ProductId;
+  price: Money; // >= 1
+  quantity: Quantity; // units on offer today (stock on shelf)
+  quality: number; // placeholder, 0 in M1
+  brand: number; // placeholder, 0 in M1
 }
 interface MarketClearing {
-  sold: readonly Quantity[];      // aligned with offers; sold[i] <= offers[i].quantity
-  referencePrice: Money;          // today's
-  demandBefore: Quantity;         // demandRemaining before this clearing
+  sold: readonly Quantity[]; // aligned with offers; sold[i] <= offers[i].quantity
+  referencePrice: Money; // today's
+  demandBefore: Quantity; // demandRemaining before this clearing
   demandAfter: Quantity;
 }
-interface RawQuote { productId: ProductId; quantity: Quantity; unitPrice: Money; total: Money }
+interface RawQuote {
+  productId: ProductId;
+  quantity: Quantity;
+  unitPrice: Money;
+  total: Money;
+}
 interface EconomyApi {
   // reads (via handle.state(); never handle.slice())
   policyRate(): number;
   priceIndex(): number;
   marketOfCity(cityId: CityId): MarketId | null;
-  referencePrice(marketId: MarketId, productId: ProductId): Money;        // InvariantError if unknown
+  referencePrice(marketId: MarketId, productId: ProductId): Money; // InvariantError if unknown
   demandRemaining(marketId: MarketId, productId: ProductId): Quantity;
   expectedCapture(marketId: MarketId, productId: ProductId, price: Money): Quantity; // floor(demandRemaining · g(r)); UI/AI preview, no side effects
-  quoteRaw(productId: ProductId, quantity: Quantity): RawQuote;           // unitPrice from CommodityState; total = mulMoney(unitPrice, quantity)
+  quoteRaw(productId: ProductId, quantity: Quantity): RawQuote; // unitPrice from CommodityState; total = mulMoney(unitPrice, quantity)
   // writes (via handle.slice()); legal only in phase `market` (clear) / `production` (buyRaw) — the service checks handle.date()/phase via caller discipline, documented, not enforced
-  clearConsumerMarket(marketId: MarketId, productId: ProductId, offers: readonly MarketOffer[]): MarketClearing;
-  buyRaw(buyerId: CompanyId, productId: ProductId, quantity: Quantity): RawQuote;  // records volume, emits commodity.purchased; caller posts
+  clearConsumerMarket(
+    marketId: MarketId,
+    productId: ProductId,
+    offers: readonly MarketOffer[],
+  ): MarketClearing;
+  buyRaw(buyerId: CompanyId, productId: ProductId, quantity: Quantity): RawQuote; // records volume, emits commodity.purchased; caller posts
 }
 ```
 

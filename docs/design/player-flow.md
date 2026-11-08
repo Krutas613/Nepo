@@ -33,8 +33,20 @@ import { assembleContentPack, ScenarioSchema, type Scenario, type ContentFiles }
 // Vite JSON imports (or import.meta.glob) of data/products.json, recipes.json, facility_types.json,
 // store_formats.json, regions.json, cities.json, markets.json, economy/{pricing,macro,commodities}.json,
 // finance/banks.json, scenarios/vertical_slice.json
-const files: ContentFiles = { products, recipes, facilityTypes, storeFormats, regions, cities, markets, pricing, macro, commodities, banks };
-const content = assembleContentPack(files);            // Result; show issues on failure
+const files: ContentFiles = {
+  products,
+  recipes,
+  facilityTypes,
+  storeFormats,
+  regions,
+  cities,
+  markets,
+  pricing,
+  macro,
+  commodities,
+  banks,
+};
+const content = assembleContentPack(files); // Result; show issues on failure
 const scenario: Scenario = { ...ScenarioSchema.parse(scenarioFile), content: content.value };
 ```
 
@@ -44,10 +56,24 @@ or a fixed default; display it (it is the replay key).
 ## 3. Read/dispatch interface
 
 ```ts
-import { createWorld, step, submit, snapshot, restore, hashState, DEFAULT_SYSTEMS, type World, type Event } from '@nepo/sim';
+import {
+  createWorld,
+  step,
+  submit,
+  snapshot,
+  restore,
+  hashState,
+  DEFAULT_SYSTEMS,
+  type World,
+  type Event,
+} from '@nepo/sim';
 const world = createWorld({ seed, scenario, systems: DEFAULT_SYSTEMS });
-const result = step(world);                 // one day; result.events === world.lastEvents
-const seq = submit(world, { type: 'store.set_price', issuer: playerId, payload: { storeId, productId, price } });
+const result = step(world); // one day; result.events === world.lastEvents
+const seq = submit(world, {
+  type: 'store.set_price',
+  issuer: playerId,
+  payload: { storeId, productId, price },
+});
 ```
 
 - **Read:** `world.state` (typed slices: `economy`, `manufacturing`, `retail`, `finance`,
@@ -72,18 +98,18 @@ stepping (the world is poisoned).
 
 ## 5. Dashboard (minimum views)
 
-| View                  | Source                                                                                                                                                                                                                              |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Header                | date (`calendarFromTick(state.tick, state.epochYear)` as `Y3 M07 D12`), cash (`ledger.accounts['1000'].balance`), speed controls, save/load                                                                                             |
-| P&L (month to date)   | `accounting.incomeStatement(ledger, ledger.monthOpening)`; prior months from `ledger.reports`                                                                                                                                           |
-| Balance sheet         | `accounting.balanceSheet(ledger)` with `byAccount` rows named from `STANDARD_CHART`                                                                                                                                                      |
-| Cash flow             | latest `month`/`quarter`/`year` report `cashFlow`                                                                                                                                                                                       |
-| Factory               | `state.manufacturing.facilities[id]`: status, recipe, target vs started, WIP, input/output lots (quantity, value, derived unit cost), `starvedReason`; commands `set_recipe`, `set_production`                                           |
-| Store                 | `state.retail.stores[id]`: status, shelf lines (stock, price or "market"), today's sold/revenue/stockout, restock policy; commands `set_price`, `set_restock_policy`                                                                      |
-| Market                | `state.economy.markets[m].products[p]`: reference price, level, demand today/remaining, yesterday's sold; chart series buffered by the UI per tick; commodity price                                                                      |
-| Bank                  | `state.finance.loans` for the player, credit status; loan request form with live quote (pure helper); `loan.repay`                                                                                                                      |
-| Build                 | facility types and store formats from `scenario.content` with cost, construction days, opex; city selector (M1: one)                                                                                                                    |
-| Event log             | buffered `Event`s with filters by `type` prefix; `command.rejected` highlighted                                                                                                                                                         |
+| View                | Source                                                                                                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Header              | date (`calendarFromTick(state.tick, state.epochYear)` as `Y3 M07 D12`), cash (`ledger.accounts['1000'].balance`), speed controls, save/load                                                    |
+| P&L (month to date) | `accounting.incomeStatement(ledger, ledger.monthOpening)`; prior months from `ledger.reports`                                                                                                  |
+| Balance sheet       | `accounting.balanceSheet(ledger)` with `byAccount` rows named from `STANDARD_CHART`                                                                                                            |
+| Cash flow           | latest `month`/`quarter`/`year` report `cashFlow`                                                                                                                                              |
+| Factory             | `state.manufacturing.facilities[id]`: status, recipe, target vs started, WIP, input/output lots (quantity, value, derived unit cost), `starvedReason`; commands `set_recipe`, `set_production` |
+| Store               | `state.retail.stores[id]`: status, shelf lines (stock, price or "market"), today's sold/revenue/stockout, restock policy; commands `set_price`, `set_restock_policy`                           |
+| Market              | `state.economy.markets[m].products[p]`: reference price, level, demand today/remaining, yesterday's sold; chart series buffered by the UI per tick; commodity price                            |
+| Bank                | `state.finance.loans` for the player, credit status; loan request form with live quote (pure helper); `loan.repay`                                                                             |
+| Build               | facility types and store formats from `scenario.content` with cost, construction days, opex; city selector (M1: one)                                                                           |
+| Event log           | buffered `Event`s with filters by `type` prefix; `command.rejected` highlighted                                                                                                                |
 
 Money is formatted from minor units by the UI (`1234567 -> 12,345.67`); the sim never formats.
 
@@ -111,7 +137,13 @@ import { manufacturingSystem } from './manufacturing/index.js';
 import { retailSystem } from './retail/index.js';
 import { financeSystem } from './finance/index.js';
 /** Every shipped system, in SYSTEM_ORDER (the engine re-sorts anyway). */
-export const DEFAULT_SYSTEMS: readonly AnySystem[] = [accountingSystem, economySystem, manufacturingSystem, retailSystem, financeSystem];
+export const DEFAULT_SYSTEMS: readonly AnySystem[] = [
+  accountingSystem,
+  economySystem,
+  manufacturingSystem,
+  retailSystem,
+  financeSystem,
+];
 ```
 
 Each domain barrel exports `<domain>System`, `<DOMAIN>_SERVICE`, `<Domain>Api`, its

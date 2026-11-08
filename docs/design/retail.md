@@ -26,33 +26,47 @@ floor(stock × x / 1000); M1 data: 0)`.
 
 ```ts
 type StoreStatus = 'under_construction' | 'operating';
-interface RestockPolicy { sourceFacilityId: FacilityId | null; targetStock: Quantity }   // null = no restocking
+interface RestockPolicy {
+  sourceFacilityId: FacilityId | null;
+  targetStock: Quantity;
+} // null = no restocking
 interface ShelfLine {
-  lot: InventoryLot;                 // account 1230
-  price: Money | null;               // null = sell at today's reference price
+  lot: InventoryLot; // account 1230
+  price: Money | null; // null = sell at today's reference price
   restock: RestockPolicy;
-  soldToday: Quantity; revenueToday: Money; unmetToday: Quantity;   // today's results (reset at the start of the store's market step)
-  shrunk: Quantity;                  // cumulative units written off (part of lot.issued)
+  soldToday: Quantity;
+  revenueToday: Money;
+  unmetToday: Quantity; // today's results (reset at the start of the store's market step)
+  shrunk: Quantity; // cumulative units written off (part of lot.issued)
 }
 interface Store {
-  id: StoreId; ownerId: CompanyId; formatId: StoreFormatId; cityId: CityId; marketId: MarketId;
-  status: StoreStatus; orderedTick: number; completesTick: number;
+  id: StoreId;
+  ownerId: CompanyId;
+  formatId: StoreFormatId;
+  cityId: CityId;
+  marketId: MarketId;
+  status: StoreStatus;
+  orderedTick: number;
+  completesTick: number;
   shelves: Record<ProductId, ShelfLine>;
-  cost: Money; accumulatedDepreciation: Money;
-  brand: number;                     // placeholder 0 in M1 (passed to MarketOffer.brand)
+  cost: Money;
+  accumulatedDepreciation: Money;
+  brand: number; // placeholder 0 in M1 (passed to MarketOffer.brand)
 }
-interface RetailState { stores: Record<StoreId, Store> }
+interface RetailState {
+  stores: Record<StoreId, Store>;
+}
 ```
 
 Invariant by construction: `Σ shelves[p].lot.quantity <= format.shelfCapacity`.
 
 ## 4. Commands (phase `apply`)
 
-| Type                       | Payload                                                     | Rejections (in order)                                                                                                                                                                                                                                           | Effect / event                                                                                                                            |
-| -------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `store.build`              | `{ companyId, storeFormatId, cityId }`                      | `not_owner`, `unknown_store_format`, `unknown_city`, `no_market` (economy.marketOfCity === null), `insufficient_cash`                                                                                                                                             | issue `StoreId`; post `capex(buildCost)`; `under_construction`, `completesTick = tick + constructionTicks`; emit `store.ordered`           |
-| `store.set_price`          | `{ storeId, productId, price: Money \| null }`              | `unknown_store`, `not_owner`, `unknown_product`, `category_not_allowed` (product.category not in format.categories), `invalid_price` (price !== null && price < 1)                                                                                                | create the shelf line if absent (empty lot, no restock); set `price`; emit `store.price_set`                                              |
-| `store.set_restock_policy` | `{ storeId, productId, sourceFacilityId: FacilityId \| null, targetStock: Quantity }` | `unknown_store`, `not_owner`, `unknown_product`, `category_not_allowed`, `unknown_facility`, `facility_not_owner` (facility.ownerId !== issuer), `not_same_city`, `target_exceeds_capacity` (targetStock > shelfCapacity)                                        | create the shelf line if absent; set `restock`; emit `store.restock_policy_set`                                                           |
+| Type                       | Payload                                                                               | Rejections (in order)                                                                                                                                                                                                     | Effect / event                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `store.build`              | `{ companyId, storeFormatId, cityId }`                                                | `not_owner`, `unknown_store_format`, `unknown_city`, `no_market` (economy.marketOfCity === null), `insufficient_cash`                                                                                                     | issue `StoreId`; post `capex(buildCost)`; `under_construction`, `completesTick = tick + constructionTicks`; emit `store.ordered` |
+| `store.set_price`          | `{ storeId, productId, price: Money \| null }`                                        | `unknown_store`, `not_owner`, `unknown_product`, `category_not_allowed` (product.category not in format.categories), `invalid_price` (price !== null && price < 1)                                                        | create the shelf line if absent (empty lot, no restock); set `price`; emit `store.price_set`                                     |
+| `store.set_restock_policy` | `{ storeId, productId, sourceFacilityId: FacilityId \| null, targetStock: Quantity }` | `unknown_store`, `not_owner`, `unknown_product`, `category_not_allowed`, `unknown_facility`, `facility_not_owner` (facility.ownerId !== issuer), `not_same_city`, `target_exceeds_capacity` (targetStock > shelfCapacity) | create the shelf line if absent; set `restock`; emit `store.restock_policy_set`                                                  |
 
 Facility checks use `ManufacturingApi.facility(id)` (read). Shelf lines are never deleted in M1.
 
@@ -75,7 +89,7 @@ Facility checks use `ManufacturingApi.facility(id)` (read). Shelf lines are neve
    `quality = 0`, `brand = store.brand`. Call `economy.clearConsumerMarket(marketId, p, offers)` once
    per group (groups in `sortedKeys(marketId)` then `sortedKeys(productId)` order). For each offer
    `i` with `sold_i > 0`: `revenue = mulMoney(price, sold_i)`; `cogs = allocateMoney(lot.value, [sold_i,
-   lot.quantity − sold_i])[0]`; issue `sold_i` from the lot; post `retailSale(revenue, cogs)` Dr 1000 /
+lot.quantity − sold_i])[0]`; issue `sold_i` from the lot; post `retailSale(revenue, cogs)` Dr 1000 /
    Cr 4000, Dr 5000 / Cr 1230 (`ref: { kind: 'store', id }`); `soldToday += sold_i`,
    `revenueToday += revenue`; `unmetToday = quantity_i === sold_i ? clearing.demandAfter : 0`
    (stockout signal); emit `store.sold { storeId, productId, quantity, revenue, cogs, price, referencePrice, stockout: boolean }`.
@@ -96,12 +110,20 @@ transfer, so `Σ cogs + shelf value === Σ transfer cost` for the life of the st
 
 ```ts
 interface RetailApi {
-  store(storeId: StoreId): DeepReadonly<Store> | null;                        // read
-  storesOf(ownerId: CompanyId, cityId?: CityId): readonly StoreId[];          // read, sorted
-  shelfQuantity(storeId: StoreId, productId: ProductId): Quantity;            // read
+  store(storeId: StoreId): DeepReadonly<Store> | null; // read
+  storesOf(ownerId: CompanyId, cityId?: CityId): readonly StoreId[]; // read, sorted
+  shelfQuantity(storeId: StoreId, productId: ProductId): Quantity; // read
   /** Lands goods on a shelf (M2 logistics arrivals). Caller has already posted the credit side; retail posts nothing. */
-  receive(storeId: StoreId, productId: ProductId, quantity: Quantity, cost: Money,
-          source: { kind: 'facility' | 'shipment'; id: string }): Result<Quantity, { code: 'unknown_store' | 'no_shelf_line' | 'over_capacity' | 'not_operating'; message: string }>;
+  receive(
+    storeId: StoreId,
+    productId: ProductId,
+    quantity: Quantity,
+    cost: Money,
+    source: { kind: 'facility' | 'shipment'; id: string },
+  ): Result<
+    Quantity,
+    { code: 'unknown_store' | 'no_shelf_line' | 'over_capacity' | 'not_operating'; message: string }
+  >;
 }
 ```
 
