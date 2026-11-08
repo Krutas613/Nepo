@@ -9,10 +9,15 @@
  *   4 logistics  logistics
  *   5 market     retail, economy, manufacturing
  *   6 finance    finance
- *   7 close      accounting first, then others (period-end work on ctx.date flags)
+ *   7 close      accounting ONLY: month/quarter/year close on ctx.date flags (ADR-009)
  *   8 decide     ai: ctx.submit commands for the next tick (the only phase where submit is legal)
  *   9 finalize   engine   debug checks, tick += 1
  * Within a phase systems run in `SYSTEM_ORDER` (schema).
+ *
+ * Registration rules (checked at `createWorld`/`restore`): `ingest`/`finalize` are engine-only
+ * (`systems.invalid_phase`); `close` may be registered only by the system with id `accounting`
+ * (`systems.close_reserved`). Domain systems post period-end entries in their own phase on the tick
+ * whose `ctx.date.isMonthEnd` (etc.) is set, so they land before accounting's close.
  */
 import type {
   Brand,
@@ -71,13 +76,22 @@ export const SYSTEM_PHASES: readonly SystemPhase[] = [
   'decide',
 ];
 
-/** Type-level read-only view. The engine does not freeze state at runtime (too slow). */
+/**
+ * Type-level read-only view. The engine does not freeze state at runtime (too slow).
+ *
+ * Arrays are handled explicitly (tuples keep their shape) so that recursive types such as the
+ * `JsonValue` of untyped slices (`ctx.state.retail`, ...) resolve instead of hitting TS2589.
+ */
 export type DeepReadonly<T> = T extends
   string | number | boolean | bigint | symbol | null | undefined
   ? T
   : T extends (...args: never[]) => unknown
     ? T
-    : { readonly [K in keyof T]: DeepReadonly<T[K]> };
+    : T extends readonly unknown[]
+      ? number extends T['length']
+        ? readonly DeepReadonly<T[number]>[]
+        : { readonly [K in keyof T]: DeepReadonly<T[K]> }
+      : { readonly [K in keyof T]: DeepReadonly<T[K]> };
 
 /** A typed key under which a system registers its service API (ADR-007). */
 export type ServiceKey<T> = Brand<string, 'ServiceKey'> & { readonly __type?: T };

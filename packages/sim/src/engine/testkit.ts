@@ -1,21 +1,26 @@
 /**
  * Test-only helpers for engine tests. Not exported from the engine barrel.
  */
-import type { AccountingState } from '../schema/index.js';
 import { sortedKeys } from './sorted.js';
 import type { System } from './system.js';
 
+/** Plain-JSON slice of `chaosSystem` (an untyped slice, ARCHITECTURE.md section 2). */
+export interface ChaosSlice {
+  decisions: number;
+}
+
 /**
- * An AI-like system that exercises RNG streams, the registry and `ctx.submit` in `decide`. It takes
- * the `accounting` id (and keeps that slice empty) only so its worlds remain valid against the
- * strict v1 snapshot schema, which has no slot for test systems.
+ * An AI-like system that exercises RNG streams, the registry and `ctx.submit` in `decide`. It uses
+ * the `ai` id, whose slice is not typed yet, so its worlds carry an untyped plain-JSON slice that
+ * `WorldStateSchema` accepts; snapshot/restore round trips cover that path too.
  */
-export const chaosSystem: System<AccountingState> = {
-  id: 'accounting',
+export const chaosSystem: System<ChaosSlice> = {
+  id: 'ai',
   handles: [],
-  init: () => ({ entities: {}, journal: [] }),
+  init: () => ({ decisions: 0 }),
   phases: {
     decide(ctx) {
+      ctx.slice.decisions += 1;
       const ids = sortedKeys(ctx.state.companies);
       for (const id of ids) {
         if (ctx.rng.chance(0.2)) {

@@ -10,6 +10,7 @@
  * `step` never hashes, zod-validates or deep-copies state unless a `StepOptions` flag asks for it.
  */
 import {
+  EMPTY_ACCOUNTING_STATE,
   InvariantError,
   ScenarioSchema,
   formatSchemaIssues,
@@ -19,6 +20,7 @@ import {
   type Command,
   type CommandInput,
   type CommandType,
+  type AccountingState,
   type CommandValidationError,
   type EntityKind,
   type Event,
@@ -30,6 +32,7 @@ import {
   type WorldState,
 } from '../schema/index.js';
 import { calendarFromTick, type CalendarDate } from './calendar.js';
+import { canonicalJson } from './canonical.js';
 import { coreSystem } from './core.js';
 import { findNonFinite } from './finite.js';
 import { hashValue } from './hash.js';
@@ -117,8 +120,20 @@ function internalsOf(world: World): WorldInternals {
   return internals;
 }
 
-/** Top-level state fields the engine owns and systems may change only through ctx/handle methods. */
-const CTX_MUTATED_FIELDS: readonly string[] = ['commandSeq', 'pendingCommands', 'registry', 'rng'];
+/**
+ * Top-level state fields the engine owns and systems may change only through ctx/handle methods,
+ * so the ownership check skips them: `registry` (`issueId`) and `rng` (`rng`/`rngFor`) in every
+ * phase; `commandSeq` and `pendingCommands` (`submit`) only in `decide`, the one phase where submit
+ * is legal (docs/design/engine.md section 3), so a direct queue write elsewhere is caught.
+ */
+const CTX_MUTATED_FIELDS: readonly string[] = ['registry', 'rng'];
+const SUBMIT_MUTATED_FIELDS: readonly string[] = ['commandSeq', 'pendingCommands'];
+
+function ownershipExclusions(system: SystemId, phase: SystemPhase): Set<string> {
+  const exclude = new Set<string>([...CTX_MUTATED_FIELDS, sliceKeyOf(system)]);
+  if (phase === 'decide') for (const field of SUBMIT_MUTATED_FIELDS) exclude.add(field);
+  return exclude;
+}
 
 function stateRecord(state: WorldState): Record<string, unknown> {
   return state as unknown as Record<string, unknown>;
@@ -131,6 +146,9 @@ function readonlyView<T>(value: T): DeepReadonly<T> {
 // -------------------------------------------------------------------------------------------------
 // System validation and ordering
 // -------------------------------------------------------------------------------------------------
+
+/** The only system that may register the `close` phase (ADR-009). */
+const CLOSE_OWNER: SystemId = 'accounting';
 
 function orderSystems(systems: readonly AnySystem[]): AnySystem[] {
   const ids = new Set<SystemId>();
@@ -153,6 +171,14 @@ function orderSystems(systems: readonly AnySystem[]): AnySystem[] {
           phase,
         });
       }
+    }
+    // ADR-009: `close` is accounting-only; the one place the engine names a domain system id.
+    if (system.phases.close !== undefined && system.id !== CLOSE_OWNER) {
+      throw new InvariantError(
+        'systems.close_reserved',
+        `${system.id} registers close; only ${CLOSE_OWNER} may (post period-end entries in your own phase)`,
+        { system: system.id, phase: 'close' },
+      );
     }
     if (system.createService !== undefined && system.serviceKey === undefined) {
       throw new InvariantError(
@@ -398,8 +424,10 @@ export function createWorld(options: CreateWorldOptions): World {
     registry: { counters: {} },
     rng: {},
     companies: {},
-    // Empty slice for a system that may not be registered; its init replaces it (section 2).
-    accounting: { entities: {}, journal: [] },
+    // Typed slice whose system may not be registered: a plain copy of schema's empty value (the
+    // constant is deep-frozen; `structuredClone` is not in the sim's ES2022-only lib). The system's
+    // init replaces it when registered (ARCHITECTURE.md section 2).
+    accounting: JSON.parse(canonicalJson(EMPTY_ACCOUNTING_STATE)) as AccountingState,
   };
   return buildWorld(state, scenario, options.systems, true);
 }
@@ -559,7 +587,7 @@ export function step(world: World, options: StepOptions = {}): TickResult {
           services,
         );
         if (ownership) {
-          const exclude = new Set<string>([...CTX_MUTATED_FIELDS, sliceKeyOf(system.id)]);
+          const exclude = ownershipExclusions(system.id, phase);
           const before = sliceHashes(state, exclude);
           const touched = new Set<SystemId>();
           internals.touched = touched;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EMPTY_ACCOUNTING_STATE,
   EMPTY_SCENARIO,
   InvariantError,
   SMOKE_SCENARIO,
@@ -86,7 +87,11 @@ describe('createWorld', () => {
       foundedTick: 0,
     });
     expect(world.state.companies[CO2]?.controller).toBe('ai');
-    expect(world.state.accounting).toEqual({ entities: {}, journal: [] });
+    expect(world.state.accounting).toEqual(EMPTY_ACCOUNTING_STATE);
+    // A mutable copy, never schema's deep-frozen constant.
+    expect(world.state.accounting).not.toBe(EMPTY_ACCOUNTING_STATE);
+    expect(Object.isFrozen(world.state.accounting)).toBe(false);
+    expect(Object.isFrozen(world.state.accounting.entities)).toBe(false);
     expect(world.lastEvents.map((e) => [e.type, e.seq, e.tick, e.source])).toEqual([
       ['company.founded', 0, 0, 'core'],
       ['company.founded', 1, 0, 'core'],
@@ -122,6 +127,35 @@ describe('createWorld', () => {
     expect(codeOf(() => createWorld({ seed: 1, scenario: EMPTY_SCENARIO, systems: [noKey] }))).toBe(
       'services.missing_key',
     );
+  });
+
+  it('close is reserved for accounting (ADR-009)', () => {
+    for (const id of ['economy', 'manufacturing', 'finance', 'ai', 'hr'] as const) {
+      const closer = probe(id, { close: () => undefined });
+      try {
+        createWorld({ seed: 1, scenario: EMPTY_SCENARIO, systems: [closer] });
+        expect.unreachable();
+      } catch (e) {
+        expect(e).toBeInstanceOf(InvariantError);
+        expect((e as InvariantError).code).toBe('systems.close_reserved');
+        expect((e as InvariantError).details).toMatchObject({ system: id, phase: 'close' });
+      }
+    }
+    // Accounting may register it, and other systems may register every other phase.
+    let closes = 0;
+    const accounting = probe('accounting', {
+      close: () => {
+        closes += 1;
+      },
+    });
+    const others = probe('economy', {
+      apply: () => undefined,
+      finance: () => undefined,
+      decide: () => undefined,
+    });
+    const world = createWorld({ seed: 1, scenario: EMPTY_SCENARIO, systems: [others, accounting] });
+    step(world);
+    expect(closes).toBe(1);
   });
 
   it('runs init in SYSTEM_ORDER with earlier services available', () => {
@@ -166,6 +200,7 @@ describe('step: phases', () => {
     const recorder = (id: SystemId): AnySystem => {
       const phases: AnySystem['phases'] = {};
       for (const phase of SYSTEM_PHASES) {
+        if (phase === 'close' && id !== 'accounting') continue; // ADR-009
         phases[phase] = (ctx) => {
           expect(ctx.phase).toBe(phase);
           calls.push([ctx.tick, phase, id]);
@@ -184,7 +219,9 @@ describe('step: phases', () => {
     const expected: [number, Phase, SystemId][] = [];
     for (const tick of [0, 1]) {
       for (const phase of SYSTEM_PHASES) {
-        for (const id of ['accounting', 'economy', 'hr'] as const) expected.push([tick, phase, id]);
+        for (const id of ['accounting', 'economy', 'hr'] as const) {
+          if (phase !== 'close' || id === 'accounting') expected.push([tick, phase, id]);
+        }
       }
     }
     expect(calls).toEqual(expected);
@@ -390,6 +427,112 @@ describe('debug checks', () => {
     expect(events).toMatchObject([{ type: 'company.renamed', source: 'accounting', seq: 0 }]);
     expect(Object.keys(world.state.rng).sort()).toEqual(['economy', 'economy/sub']);
     expect(world.state.registry.counters.facility).toBe(1);
+  });
+
+  it('service write passes; a direct foreign write after only reading via the service throws', () => {
+    interface Shelf {
+      stock: number;
+    }
+    interface ShelfApi {
+      stock(): number;
+      take(n: number): void;
+    }
+    const KEY = createServiceKey<ShelfApi>('test.shelf');
+    // Owner with an untyped plain-JSON slice under a real, not-yet-typed SystemId.
+    const owner: System<Shelf> = {
+      id: 'retail',
+      handles: [],
+      init: () => ({ stock: 100 }),
+      phases: {},
+      serviceKey: KEY,
+      createService: (handle): ShelfApi => ({
+        // Reads go through handle.state(), so they do not declare a mutation (ARCHITECTURE 6.2).
+        stock: () => (handle.state().retail as unknown as Shelf).stock,
+        take(n) {
+          handle.slice().stock -= n;
+        },
+      }),
+    };
+    const caller = (mode: 'service' | 'direct'): AnySystem =>
+      probe('economy', {
+        production(ctx) {
+          const shelf = ctx.services.get(KEY);
+          if (mode === 'service') {
+            shelf.take(1);
+          } else {
+            const seen = shelf.stock();
+            (ctx.state.retail as unknown as Shelf).stock = seen - 1;
+          }
+        },
+      });
+
+    const viaService = createWorld({
+      seed: 1,
+      scenario: SMOKE_SCENARIO,
+      systems: [owner, caller('service')],
+    });
+    step(viaService, { checkSliceOwnership: true });
+    step(viaService, { checkSliceOwnership: true });
+    expect(viaService.state.retail).toEqual({ stock: 98 });
+
+    const direct = createWorld({
+      seed: 1,
+      scenario: SMOKE_SCENARIO,
+      systems: [owner, caller('direct')],
+    });
+    try {
+      step(direct, { checkSliceOwnership: true });
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(InvariantError);
+      expect((e as InvariantError).code).toBe('slice.foreign_write');
+      expect((e as InvariantError).details).toMatchObject({
+        system: 'economy',
+        phase: 'production',
+        slice: 'retail',
+        tick: 0,
+      });
+    }
+  });
+
+  it('the command queue is excluded from the ownership check only in decide', () => {
+    const forge = (phase: 'apply' | 'decide'): AnySystem =>
+      probe('ai', {
+        [phase]: (ctx: { state: unknown; tick: number }) => {
+          const state = ctx.state as { commandSeq: number; pendingCommands: Command[] };
+          state.commandSeq += 1;
+          state.pendingCommands.push({
+            type: 'company.rename',
+            seq: state.commandSeq,
+            tick: ctx.tick + 1,
+            issuer: CO1,
+            payload: { name: 'Forged' },
+          });
+        },
+      });
+    const outside = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [forge('apply')] });
+    try {
+      step(outside, { checkSliceOwnership: true });
+      expect.unreachable();
+    } catch (e) {
+      expect((e as InvariantError).code).toBe('slice.foreign_write');
+      expect((e as InvariantError).details).toMatchObject({ system: 'ai', phase: 'apply' });
+      expect(['commandSeq', 'pendingCommands']).toContain((e as InvariantError).details['slice']);
+    }
+    // In decide the fields are ctx-mediated (submit) and not checked: a known, accepted gap.
+    const inside = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [forge('decide')] });
+    step(inside, { checkSliceOwnership: true });
+    expect(inside.state.pendingCommands).toHaveLength(1);
+    // ctx.submit in decide passes the check.
+    const submitter = probe('ai', {
+      decide(ctx) {
+        ctx.submit(rename('co_000002', 'Legit'));
+      },
+    });
+    const legit = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [submitter] });
+    step(legit, { checkSliceOwnership: true });
+    step(legit, { checkSliceOwnership: true });
+    expect(legit.state.companies[CO2]?.name).toBe('Legit');
   });
 
   it('checkFinite reports non-finite paths', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  InvariantError,
   SCHEMA_VERSION,
   SMOKE_SCENARIO,
   SnapshotError,
@@ -35,6 +36,16 @@ function snapshotCode(fn: () => unknown): string {
   throw new Error('expected a throw');
 }
 
+function invariantCode(fn: () => unknown): string {
+  try {
+    fn();
+  } catch (e) {
+    expect(e).toBeInstanceOf(InvariantError);
+    return (e as InvariantError).code;
+  }
+  throw new Error('expected a throw');
+}
+
 describe('snapshot', () => {
   it('produces a valid, self-contained, deep-copied envelope', () => {
     const world = createWorld({ seed: 5, scenario: SMOKE_SCENARIO, systems: SYSTEMS });
@@ -48,7 +59,51 @@ describe('snapshot', () => {
     expect(snap.hash).toBe(hashState(world.state));
     expect(snap.state).not.toBe(world.state);
     expect(snap.state).toEqual(world.state);
+    expect(snap.scenario).toEqual(SMOKE_SCENARIO);
+    expect(snap.scenario).toEqual(world.scenario);
+    expect(snap.scenario).not.toBe(world.scenario);
+    // The untyped `ai` slice of the chaos system is part of the saved state.
+    expect(snap.state.ai).toEqual({ decisions: 10 });
     expect(SnapshotSchema.safeParse(snap).success).toBe(true);
+  });
+
+  it('the hash covers state only: a different scenario name does not change it', () => {
+    const world = createWorld({ seed: 5, scenario: SMOKE_SCENARIO, systems: SYSTEMS });
+    const renamed = createWorld({
+      seed: 5,
+      scenario: { ...SMOKE_SCENARIO, name: 'Another name' },
+      systems: SYSTEMS,
+    });
+    expect(snapshot(renamed).hash).toBe(snapshot(world).hash);
+  });
+
+  it('mutating a snapshot does not reach the live world', () => {
+    const world = createWorld({ seed: 5, scenario: SMOKE_SCENARIO, systems: SYSTEMS });
+    const snap = snapshot(world);
+    snap.scenario.name = 'mutated';
+    snap.scenario.companies.length = 0;
+    expect(world.scenario).toEqual(SMOKE_SCENARIO);
+  });
+});
+
+describe('self-contained save', () => {
+  it('restore(JSON.parse(JSON.stringify(snapshot(w))), systems) needs no options', () => {
+    const world = createWorld({ seed: 77, scenario: SMOKE_SCENARIO, systems: SYSTEMS });
+    run(world, 45);
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(world))) as unknown, SYSTEMS);
+    expect(hashState(restored.state)).toBe(hashState(world.state));
+    expect(restored.scenario).toEqual(world.scenario);
+    expect(restored.scenario).toEqual(SMOKE_SCENARIO);
+    expect(restored.scenario).not.toBe(world.scenario);
+    expect(run(restored, 30)).toEqual(run(world, 30));
+  });
+
+  it('a snapshot without a scenario is invalid', () => {
+    const world = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [] });
+    const { scenario: _dropped, ...rest } = snapshot(world);
+    expect(snapshotCode(() => restore(rest, []))).toBe('invalid');
+    const bad = { ...snapshot(world), scenario: { ...SMOKE_SCENARIO, id: '' } };
+    expect(snapshotCode(() => restore(bad, []))).toBe('invalid');
   });
 });
 
@@ -65,7 +120,7 @@ describe('restore equivalence', () => {
     run(original, k);
     // Through text, as a save file would be.
     const text = JSON.stringify(snapshot(original));
-    const restored = restore(JSON.parse(text) as unknown, SYSTEMS, { scenario: SMOKE_SCENARIO });
+    const restored = restore(JSON.parse(text) as unknown, SYSTEMS);
     expect(hashState(restored.state)).toBe(hashState(original.state));
     expect(restored.lastEvents).toEqual([]);
 
@@ -76,7 +131,7 @@ describe('restore equivalence', () => {
   });
 
   it('carries queued commands (including optional fields) and does not call init', () => {
-    const world = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [] });
+    const world = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: SYSTEMS });
     submit(world, {
       type: 'company.rename',
       issuer: companyId('co_000001'),
@@ -98,11 +153,11 @@ describe('restore equivalence', () => {
     const restored = restore(snapshot(world), [counting]);
     expect(inits).toBe(0);
     expect(restored.state.pendingCommands).toHaveLength(2);
-    expect(restored.scenario.epochYear).toBe(2000);
+    expect(restored.state.commandSeq).toBe(2);
+    expect(restored.scenario).toEqual(SMOKE_SCENARIO);
     const { events } = step(restored);
     expect(events.map((e) => e.type)).toEqual(['company.renamed', 'command.rejected']);
     expect(restored.state.companies[companyId('co_000001')]?.name).toBe('Queued');
-    expect(restored.state.commandSeq).toBe(2);
   });
 
   it('restored state is independent of the snapshot object', () => {
@@ -141,10 +196,18 @@ describe('restore errors', () => {
     expect(snapshotCode(() => restore(snap, []))).toBe('invalid');
   });
 
-  it('scenario_mismatch when the given scenario has another epoch', () => {
-    expect(
-      snapshotCode(() => restore(base(), [], { scenario: { ...SMOKE_SCENARIO, epochYear: 1990 } })),
-    ).toBe('scenario_mismatch');
+  it('scenario_mismatch when the saved scenario has another epoch (scenario is not hashed)', () => {
+    const snap = base();
+    snap.scenario.epochYear = 1990;
+    expect(snapshotCode(() => restore(snap, []))).toBe('scenario_mismatch');
+  });
+
+  it('missing_slice and system validation apply on restore', () => {
+    // `base()` has no systems, so its state has no `ai` slice.
+    expect(invariantCode(() => restore(base(), SYSTEMS))).toBe('restore.missing_slice');
+    const withAi = snapshot(createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: SYSTEMS }));
+    const closer: AnySystem = { ...(chaosSystem as AnySystem), phases: { close: () => undefined } };
+    expect(invariantCode(() => restore(withAi, [closer]))).toBe('systems.close_reserved');
   });
 });
 

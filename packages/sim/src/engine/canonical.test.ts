@@ -74,12 +74,25 @@ describe('canonicalJson', () => {
     expect(JSON.parse(canonicalJson(value))).toEqual(value);
   });
 
+  it('serializes an own __proto__ key like any other key', () => {
+    const value = Object.fromEntries([
+      ['__proto__', 1],
+      ['a', 2],
+    ]) as Record<string, unknown>;
+    expect(canonicalJson(value)).toBe('{"__proto__":1,"a":2}');
+    expect(canonicalJson(JSON.parse('{"a":2,"__proto__":1}'))).toBe('{"__proto__":1,"a":2}');
+  });
+
   it('property: output is independent of key insertion order', () => {
     fc.assert(
       fc.property(fc.dictionary(fc.string(), fc.jsonValue()), (dict) => {
-        const keys = Object.keys(dict);
-        const reversed: Record<string, unknown> = {};
-        for (const key of [...keys].reverse()) reversed[key] = dict[key];
+        // `Object.fromEntries` defines own properties, so a generated `__proto__` key stays a key
+        // (plain assignment would set the prototype and drop it).
+        const reversed = Object.fromEntries(
+          Object.keys(dict)
+            .reverse()
+            .map((key) => [key, dict[key]]),
+        );
         const canon = canonicalJson(dict);
         return canon === canonicalJson(reversed) && canonicalJson(JSON.parse(canon)) === canon;
       }),
