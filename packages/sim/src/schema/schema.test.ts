@@ -1,28 +1,34 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
-  AccountingStateSchema,
   CommandInputSchema,
   CommandSchema,
   CompanyIdSchema,
-  EMPTY_ACCOUNTING_STATE,
+  AccountCodeSchema,
+  BankIdSchema,
+  CityIdSchema,
   EMPTY_SCENARIO,
+  EMPTY_TYPED_SLICES,
+  FacilityIdSchema,
+  FacilityTypeIdSchema,
+  LoanIdSchema,
+  MarketIdSchema,
+  RecipeIdSchema,
+  RecordKeySchema,
+  RegionIdSchema,
+  StoreFormatIdSchema,
+  StoreIdSchema,
   JsonValueSchema,
   EventSchema,
-  FacilitySchema,
   ID_PREFIX,
   InvariantError,
-  MarketSchema,
   MAX_SCENARIO_STARTING_CASH,
   ProductIdSchema,
-  ProductSchema,
-  RecipeSchema,
   SCHEMA_VERSION,
   SMOKE_SCENARIO,
   SnapshotEnvelopeSchema,
   SnapshotError,
   SnapshotSchema,
-  StoreSchema,
   WorldStateSchema,
   SYSTEM_ORDER,
   SystemIdSchema,
@@ -135,7 +141,55 @@ describe('ids', () => {
   it('cast helpers return the string unchanged', () => {
     expect(companyId('co_000001')).toBe('co_000001');
     expect(journalEntryId('je_000042')).toBe('je_000042');
-    expect(accountCode('1000')).toBe('1000');
+    expect(accountCode('a1000')).toBe('a1000');
+  });
+
+  it('AccountCodeSchema takes the stored letter-prefixed form only (schema v2)', () => {
+    for (const good of ['a1000', 'a1205', 'a1230', 'a2500', 'a7999']) {
+      expect(AccountCodeSchema.parse(good)).toBe(good);
+    }
+    for (const bad of ['1000', 'a0999', 'a8000', 'A1000', 'a100', 'a10000', 'b1000', ' a1000']) {
+      expect(AccountCodeSchema.safeParse(bad).success).toBe(false);
+    }
+    // String order of the stored form equals numeric order of the code.
+    expect(['a5000', 'a1230', 'a1205', 'a4000'].sort()).toEqual([
+      'a1205',
+      'a1230',
+      'a4000',
+      'a5000',
+    ]);
+  });
+
+  it('RecordKeySchema rejects integer-like keys', () => {
+    for (const bad of ['0', '7', '1000', '007'])
+      expect(RecordKeySchema.safeParse(bad).success).toBe(false);
+    for (const good of ['core', 'a1000', '1a', '-1', '1.5', '']) {
+      expect(RecordKeySchema.safeParse(good).success).toBe(true);
+    }
+  });
+
+  it('property: no record key schema used in state accepts an integer-like string', () => {
+    const keySchemas = [
+      RecordKeySchema,
+      AccountCodeSchema,
+      CompanyIdSchema,
+      FacilityIdSchema,
+      StoreIdSchema,
+      LoanIdSchema,
+      ProductIdSchema,
+      MarketIdSchema,
+      CityIdSchema,
+      RegionIdSchema,
+      RecipeIdSchema,
+      FacilityTypeIdSchema,
+      StoreFormatIdSchema,
+      BankIdSchema,
+    ];
+    fc.assert(
+      fc.property(fc.stringMatching(/^\d{1,12}$/), (key) => {
+        for (const schema of keySchemas) expect(schema.safeParse(key).success).toBe(false);
+      }),
+    );
   });
 
   it('entity id patterns follow the registry format', () => {
@@ -198,6 +252,7 @@ describe('scenario', () => {
   it('accepts the fixtures', () => {
     expect(ScenarioSchema.parse(SMOKE_SCENARIO)).toEqual(SMOKE_SCENARIO);
     expect(ScenarioSchema.parse(EMPTY_SCENARIO)).toEqual(EMPTY_SCENARIO);
+    expect(Object.keys(SMOKE_SCENARIO.content.products)).toEqual([]);
     expect(SMOKE_SCENARIO.companies.map((c) => c.controller)).toEqual(['player', 'ai']);
     expect(SMOKE_SCENARIO.companies.every((c) => c.startingCash === 100_000_000)).toBe(true);
     expect(EMPTY_SCENARIO.companies).toEqual([]);
@@ -309,8 +364,8 @@ const m = (n: number): Money => money(n);
 
 function minimalState(): WorldState {
   const co1 = companyId('co_000001');
-  const cash = code('1000');
-  const capital = code('3000');
+  const cash = code('a1000');
+  const capital = code('a3000');
   return {
     seed: 42,
     tick: 1,
@@ -358,6 +413,10 @@ function minimalState(): WorldState {
         },
       ],
     },
+    economy: EMPTY_TYPED_SLICES.economy,
+    manufacturing: EMPTY_TYPED_SLICES.manufacturing,
+    retail: EMPTY_TYPED_SLICES.retail,
+    finance: EMPTY_TYPED_SLICES.finance,
   };
 }
 
@@ -395,11 +454,11 @@ const LEDGER1 = ['state', 'accounting', 'entities', 'co_000001'] as const;
 const ENTRY0 = ['state', 'accounting', 'journal', 0] as const;
 
 describe('snapshot', () => {
-  it('SCHEMA_VERSION is 1', () => {
-    expect(SCHEMA_VERSION).toBe(1);
+  it('SCHEMA_VERSION is 2', () => {
+    expect(SCHEMA_VERSION).toBe(2);
   });
 
-  it('accepts a hand-built minimal M0 snapshot, unchanged', () => {
+  it('accepts a hand-built minimal v2 snapshot (all EMPTY_ typed slices), unchanged', () => {
     const snap = minimalSnapshot();
     const parsed = SnapshotSchema.parse(JSON.parse(JSON.stringify(snap)));
     expect(parsed).toEqual(snap);
@@ -428,7 +487,7 @@ describe('snapshot', () => {
         assets: 100,
         liabilities: 0,
         equity: 100,
-        byAccount: { '1000': 100, '3000': -100 },
+        byAccount: { a1000: 100, a3000: -100 },
       },
       cashFlow: {
         netIncome: 0,
@@ -446,7 +505,24 @@ describe('snapshot', () => {
   const company1 = minimalState().companies[companyId('co_000001')];
 
   it.each<[string, Path, unknown]>([
-    ['NaN balance', [...LEDGER1, 'accounts', '1000', 'balance'], NaN],
+    ['NaN balance', [...LEDGER1, 'accounts', 'a1000', 'balance'], NaN],
+    [
+      'v1 account key',
+      [...LEDGER1, 'accounts', '1000'],
+      { code: 'a1000', name: 'Cash', type: 'asset', balance: 0 },
+    ],
+    ['v1 account code value', [...LEDGER1, 'accounts', 'a1000', 'code'], '1000'],
+    ['v1 monthOpening key', [...LEDGER1, 'monthOpening', '1000'], 0],
+    ['v1 yearOpening key', [...LEDGER1, 'yearOpening', '3000'], 0],
+    ['v1 journal line account', [...ENTRY0, 'lines', 0, 'account'], '1000'],
+    ['integer-like rng stream key', ['state', 'rng', '0'], { s: [1, 2, 3, 4] }],
+    ['integer-like key inside an untyped slice', ['state', 'logistics'], { '42': 1 }],
+    ['missing economy slice', ['state', 'economy'], undefined],
+    ['missing manufacturing slice', ['state', 'manufacturing'], undefined],
+    ['missing retail slice', ['state', 'retail'], undefined],
+    ['missing finance slice', ['state', 'finance'], undefined],
+    ['untyped JSON under a now-typed key', ['state', 'retail'], { price: 1 }],
+    ['malformed economy slice', ['state', 'economy', 'macro'], {}],
     ['Infinity tick', ['state', 'tick'], Infinity],
     ['-0 seed', ['state', 'seed'], -0],
     ['float money', [...ENTRY0, 'lines', 0, 'debit'], 0.5],
@@ -468,20 +544,30 @@ describe('snapshot', () => {
     ['core as an untyped slice (its typed slice is companies)', ['state', 'core'], {}],
     ['malformed typed slice', ['state', 'accounting'], { entities: {} }],
     ['typed slice with an extra key', ['state', 'accounting', 'extra'], []],
-    ['NaN inside an untyped slice', ['state', 'retail'], { price: NaN }],
-    ['-0 inside an untyped slice', ['state', 'economy'], [1, -0]],
-    ['undefined inside an untyped slice', ['state', 'finance'], { x: undefined }],
+    ['NaN inside an untyped slice', ['state', 'logistics'], { price: NaN }],
+    ['-0 inside an untyped slice', ['state', 'ai'], [1, -0]],
+    ['undefined inside an untyped slice', ['state', 'hr'], { x: undefined }],
     ['Map as an untyped slice', ['state', 'hr'], new Map()],
     ['Set inside an untyped slice', ['state', 'ai'], { ids: new Set([1]) }],
     [
       'class instance as an untyped slice',
-      ['state', 'manufacturing'],
+      ['state', 'logistics'],
       new (class Box {
         x = 1;
       })(),
     ],
   ])('rejects %s', (_label, path, value) => {
     expect(SnapshotSchema.safeParse(mutated(path, value)).success).toBe(false);
+  });
+
+  it('rejects a snapshot whose state lacks a typed slice (key deleted)', () => {
+    for (const key of ['accounting', 'economy', 'manufacturing', 'retail', 'finance']) {
+      const raw = JSON.parse(JSON.stringify(minimalSnapshot())) as {
+        state: Record<string, unknown>;
+      };
+      Reflect.deleteProperty(raw.state, key);
+      expect(SnapshotSchema.safeParse(raw).success).toBe(false);
+    }
   });
 
   it('requires scenario in both the snapshot and the envelope', () => {
@@ -500,10 +586,22 @@ describe('snapshot', () => {
 });
 
 describe('world state: untyped slices', () => {
-  const untypedIds = SYSTEM_ORDER.filter((id) => id !== 'core' && id !== 'accounting');
+  const typed: readonly SystemId[] = [
+    'core',
+    'accounting',
+    'economy',
+    'manufacturing',
+    'retail',
+    'finance',
+  ];
+  const untypedIds = SYSTEM_ORDER.filter((id) => !typed.includes(id));
 
-  it('accepts `retail: {}` and returns it unchanged', () => {
-    const raw = { ...minimalState(), retail: {} };
+  it('only logistics, ai and hr remain untyped', () => {
+    expect(untypedIds).toEqual(['logistics', 'ai', 'hr']);
+  });
+
+  it('accepts `logistics: {}` and returns it unchanged', () => {
+    const raw = { ...minimalState(), logistics: {} };
     expect(WorldStateSchema.parse(raw)).toEqual(raw);
   });
 
@@ -529,113 +627,21 @@ describe('world state: untyped slices', () => {
     expect(WorldStateSchema.safeParse({ ...state, accounting: {} }).success).toBe(false);
   });
 
-  it('property: JsonValueSchema accepts every value that survives a JSON round trip', () => {
+  it('property: JsonValueSchema accepts every JSON round-trip value without integer-like keys', () => {
+    const noIntegerLikeKeys = (v: unknown): boolean =>
+      Array.isArray(v)
+        ? v.every(noIntegerLikeKeys)
+        : typeof v === 'object' && v !== null
+          ? Object.keys(v).every(
+              (k) => !/^\d+$/.test(k) && noIntegerLikeKeys((v as Record<string, unknown>)[k]),
+            )
+          : true;
     fc.assert(
-      fc.property(fc.jsonValue(), (v) => {
+      fc.property(fc.jsonValue().filter(noIntegerLikeKeys), (v) => {
         // The round trip turns -0 into 0, which state forbids anyway.
         const value: unknown = JSON.parse(JSON.stringify(v));
         expect(JsonValueSchema.safeParse(value).success).toBe(true);
       }),
     );
-  });
-});
-
-describe('empty slices', () => {
-  it('EMPTY_ACCOUNTING_STATE validates, is empty and deep-frozen', () => {
-    expect(AccountingStateSchema.parse(EMPTY_ACCOUNTING_STATE)).toEqual({
-      entities: {},
-      journal: [],
-    });
-    expect(Object.isFrozen(EMPTY_ACCOUNTING_STATE)).toBe(true);
-    expect(Object.isFrozen(EMPTY_ACCOUNTING_STATE.entities)).toBe(true);
-    expect(Object.isFrozen(EMPTY_ACCOUNTING_STATE.journal)).toBe(true);
-    expect(
-      WorldStateSchema.safeParse({ ...minimalState(), accounting: EMPTY_ACCOUNTING_STATE }).success,
-    ).toBe(true);
-  });
-});
-
-describe('content', () => {
-  it('accepts valid definitions', () => {
-    expect(
-      ProductSchema.safeParse({
-        id: 'steel',
-        name: 'Steel',
-        category: 'intermediate',
-        unit: 'tonne',
-        basePrice: 45000,
-      }).success,
-    ).toBe(true);
-    expect(
-      RecipeSchema.safeParse({
-        id: 'smelt_steel',
-        name: 'Smelt steel',
-        facility: 'steel_mill',
-        inputs: [{ product: 'iron_ore', quantity: 2 }],
-        outputs: [{ product: 'steel', quantity: 1 }],
-        durationTicks: 1,
-      }).success,
-    ).toBe(true);
-    expect(
-      FacilitySchema.safeParse({
-        id: 'steel_mill',
-        name: 'Steel mill',
-        kind: 'factory',
-        buildCost: 1000,
-        dailyOperatingCost: 10,
-        capacity: 1,
-      }).success,
-    ).toBe(true);
-    expect(
-      StoreSchema.safeParse({
-        id: 'corner_shop',
-        name: 'Corner shop',
-        buildCost: 1000,
-        dailyOperatingCost: 10,
-        shelfCapacity: 500,
-        categories: ['consumer'],
-      }).success,
-    ).toBe(true);
-    expect(
-      MarketSchema.safeParse({
-        id: 'springfield',
-        name: 'Springfield',
-        city: 'springfield',
-        region: 'midwest',
-        population: 100000,
-        demand: [{ product: 'bread', baseDailyDemand: 500, referencePrice: 250 }],
-      }).success,
-    ).toBe(true);
-  });
-
-  it('rejects invalid definitions', () => {
-    expect(
-      ProductSchema.safeParse({
-        id: 'steel',
-        name: 'Steel',
-        category: 'intermediate',
-        unit: 'tonne',
-        basePrice: 0,
-      }).success,
-    ).toBe(false);
-    expect(
-      ProductSchema.safeParse({
-        id: 'Steel',
-        name: 'Steel',
-        category: 'intermediate',
-        unit: 'tonne',
-        basePrice: 1,
-      }).success,
-    ).toBe(false);
-    expect(
-      RecipeSchema.safeParse({
-        id: 'r',
-        name: 'R',
-        facility: 'f',
-        inputs: [],
-        outputs: [],
-        durationTicks: 1,
-      }).success,
-    ).toBe(false);
   });
 });

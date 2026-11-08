@@ -456,10 +456,7 @@ function checkContentPack(pack: ContentPack, ctx: z.RefinementCtx): void {
     const recipe = pack.recipes[key as RecipeId];
     if (recipe === undefined) continue;
     if (pack.facilityTypes[recipe.facilityType] === undefined) {
-      issue(
-        ['recipes', key, 'facilityType'],
-        `unknown facility type '${recipe.facilityType}'`,
-      );
+      issue(['recipes', key, 'facilityType'], `unknown facility type '${recipe.facilityType}'`);
     }
     for (const side of ['inputs', 'outputs'] as const) {
       recipe[side].forEach((line, i) => {
@@ -495,7 +492,8 @@ function checkContentPack(pack: ContentPack, ctx: z.RefinementCtx): void {
       const path = ['markets', key, 'demand', i, 'product'];
       const p = product(d.product);
       if (p === undefined) issue(path, `unknown product '${d.product}'`);
-      else if (p.category === 'raw') issue(path, `raw product '${d.product}' has no consumer demand`);
+      else if (p.category === 'raw')
+        issue(path, `raw product '${d.product}' has no consumer demand`);
       if (seen[d.product] === true) issue(path, `duplicate demand for product '${d.product}'`);
       seen[d.product] = true;
     });

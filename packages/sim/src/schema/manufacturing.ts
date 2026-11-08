@@ -32,12 +32,7 @@ export type FacilityStatus = 'under_construction' | 'operating';
 
 /** Why the last production day started fewer batches than `targetBatches` (UI). */
 export type StarvedReason =
-  | 'no_recipe'
-  | 'off'
-  | 'capacity'
-  | 'storage_full'
-  | 'no_inputs'
-  | 'no_cash';
+  'no_recipe' | 'off' | 'capacity' | 'storage_full' | 'no_inputs' | 'no_cash';
 
 export interface WipBatch {
   recipeId: RecipeId;

@@ -189,7 +189,10 @@ describe('inventory lots', () => {
         q: fc.integer({ min: 0, max: 10_000 }),
         cost: fc.integer({ min: 0, max: 1_000_000 }),
       }),
-      fc.record({ kind: fc.constant('issue' as const), fraction: fc.double({ min: 0, max: 1, noNaN: true }) }),
+      fc.record({
+        kind: fc.constant('issue' as const),
+        fraction: fc.double({ min: 0, max: 1, noNaN: true }),
+      }),
     );
     fc.assert(
       fc.property(fc.array(op, { maxLength: 40 }), (ops) => {
@@ -202,7 +205,12 @@ describe('inventory lots', () => {
           } else {
             const n = Math.floor(l.quantity * o.fraction);
             // allocateMoney(value, [n, quantity - n])[0], floor variant (exact for this check)
-            const cost = l.quantity === 0 ? 0 : n === l.quantity ? l.value : Math.floor((l.value * n) / l.quantity);
+            const cost =
+              l.quantity === 0
+                ? 0
+                : n === l.quantity
+                  ? l.value
+                  : Math.floor((l.value * n) / l.quantity);
             l.quantity -= n;
             l.value -= cost;
             l.issued += n;
@@ -229,12 +237,12 @@ describe('typed slices accept populated values', () => {
     const m: ManufacturingState = ManufacturingStateSchema.parse(manufacturing);
     const r: RetailState = RetailStateSchema.parse(retail);
     const f: FinanceState = FinanceStateSchema.parse(finance);
-    expect([e.macro.priceIndex, Object.keys(m.facilities), Object.keys(r.stores), Object.keys(f.loans)]).toEqual([
-      1.02,
-      ['fa_000001'],
-      ['st_000001'],
-      ['ln_000001'],
-    ]);
+    expect([
+      e.macro.priceIndex,
+      Object.keys(m.facilities),
+      Object.keys(r.stores),
+      Object.keys(f.loans),
+    ]).toEqual([1.02, ['fa_000001'], ['st_000001'], ['ln_000001']]);
   });
 });
 
@@ -255,7 +263,11 @@ describe('typed slices reject', () => {
     ['referencePrice 0', [...PM, 'referencePrice'], 0],
     ['commodity unitPrice 0', ['commodities', 'grain', 'unitPrice'], 0],
     ['priceIndex 0', ['macro', 'priceIndex'], 0],
-    ['integer-like product key', [...M, 'products', '7'], economy.markets.springfield_market.products.bread],
+    [
+      'integer-like product key',
+      [...M, 'products', '7'],
+      economy.markets.springfield_market.products.bread,
+    ],
     ['missing macro', ['macro'], undefined],
   ])('economy: %s', (_label, path, value) => {
     expect(EconomyStateSchema.safeParse(withValue(economy, path, value)).success).toBe(false);

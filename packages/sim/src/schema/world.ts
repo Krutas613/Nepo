@@ -50,12 +50,7 @@ export interface RngStreamState {
  * key is the `SystemId`, except `core`, whose slice is `companies`.
  */
 export type TypedSliceSystemId =
-  | 'core'
-  | 'accounting'
-  | 'economy'
-  | 'manufacturing'
-  | 'retail'
-  | 'finance';
+  'core' | 'accounting' | 'economy' | 'manufacturing' | 'retail' | 'finance';
 
 /** Typed slices whose key is their `SystemId` (every typed slice except `core`'s `companies`). */
 export type TypedDomainSliceId = Exclude<TypedSliceSystemId, 'core'>;
@@ -116,14 +111,15 @@ export interface WorldState extends UntypedSlices {
  * the same values, so no module hand-writes a slice shape. Deep-frozen: install copies.
  * (Assignable to `Readonly<Record<TypedDomainSliceId, unknown>>`, the type schema-m1.md names.)
  */
-export const EMPTY_TYPED_SLICES: { readonly [K in TypedDomainSliceId]: WorldState[K] } =
-  deepFreeze({
+export const EMPTY_TYPED_SLICES: { readonly [K in TypedDomainSliceId]: WorldState[K] } = deepFreeze(
+  {
     accounting: EMPTY_ACCOUNTING_STATE,
     economy: EMPTY_ECONOMY_STATE,
     manufacturing: EMPTY_MANUFACTURING_STATE,
     retail: EMPTY_RETAIL_STATE,
     finance: EMPTY_FINANCE_STATE,
-  });
+  },
+);
 
 // ---------------------------------------------------------------------------------------------
 // zod validators

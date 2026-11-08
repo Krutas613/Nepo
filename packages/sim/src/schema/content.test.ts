@@ -161,7 +161,11 @@ describe('ContentPackSchema', () => {
   it.each<[string, Path, unknown]>([
     ['product keyed under another id', ['products', 'bread', 'id'], 'grain'],
     ['bank keyed under another id', ['finance', 'banks', 'first_national', 'id'], 'other_bank'],
-    ['commodity keyed under another product', ['economy', 'commodities', 'grain', 'product'], 'bread'],
+    [
+      'commodity keyed under another product',
+      ['economy', 'commodities', 'grain', 'product'],
+      'bread',
+    ],
     ['integer-like product key', ['products', '123'], BREAD],
   ])('rejects %s', (_label, path, value) => {
     expect(ContentPackSchema.safeParse(withValue(M1_CONTENT_PACK, path, value)).success).toBe(
@@ -224,15 +228,50 @@ describe('assembleContentPack', () => {
   });
 
   it.each<[string, Path, unknown, string]>([
-    ['recipe input is not a product', ['recipes', 0, 'inputs', 0, 'product'], 'flour', 'recipes.bake_bread.inputs.0.product'],
-    ['recipe output is not a product', ['recipes', 0, 'outputs', 0, 'product'], 'cake', 'recipes.bake_bread.outputs.0.product'],
-    ['recipe facility type unknown', ['recipes', 0, 'facilityType'], 'mill', 'recipes.bake_bread.facilityType'],
+    [
+      'recipe input is not a product',
+      ['recipes', 0, 'inputs', 0, 'product'],
+      'flour',
+      'recipes.bake_bread.inputs.0.product',
+    ],
+    [
+      'recipe output is not a product',
+      ['recipes', 0, 'outputs', 0, 'product'],
+      'cake',
+      'recipes.bake_bread.outputs.0.product',
+    ],
+    [
+      'recipe facility type unknown',
+      ['recipes', 0, 'facilityType'],
+      'mill',
+      'recipes.bake_bread.facilityType',
+    ],
     ['city region unknown', ['cities', 0, 'region'], 'coast', 'cities.springfield.region'],
-    ['market city unknown', ['markets', 0, 'city'], 'shelbyville', 'markets.springfield_market.city'],
-    ['market demand for unknown product', ['markets', 0, 'demand', 0, 'product'], 'cake', 'unknown product'],
-    ['market demand for a raw product', ['markets', 0, 'demand', 0, 'product'], 'grain', 'raw product'],
+    [
+      'market city unknown',
+      ['markets', 0, 'city'],
+      'shelbyville',
+      'markets.springfield_market.city',
+    ],
+    [
+      'market demand for unknown product',
+      ['markets', 0, 'demand', 0, 'product'],
+      'cake',
+      'unknown product',
+    ],
+    [
+      'market demand for a raw product',
+      ['markets', 0, 'demand', 0, 'product'],
+      'grain',
+      'raw product',
+    ],
     ['commodity for a non-raw product', ['commodities', 0, 'product'], 'bread', 'is not raw'],
-    ['raw product without a source', ['commodities'], [], "raw product 'grain' has no commodity source"],
+    [
+      'raw product without a source',
+      ['commodities'],
+      [],
+      "raw product 'grain' has no commodity source",
+    ],
   ])('cross_reference: %s', (_label, path, value, fragment) => {
     const files = filesOf(M1_CONTENT_PACK);
     setPath(files, path, value);
@@ -266,7 +305,8 @@ describe('assembleContentPack', () => {
       fc.property(fc.shuffledSubarray(products, { minLength: products.length }), (shuffled) => {
         const r = assembleContentPack({ ...base, products: shuffled });
         expect(r).toEqual(expected);
-        if (r.ok) expect(Object.keys(r.value.products)).toEqual(Object.keys(r.value.products).sort());
+        if (r.ok)
+          expect(Object.keys(r.value.products)).toEqual(Object.keys(r.value.products).sort());
       }),
     );
   });
@@ -297,16 +337,20 @@ describe('scenario content', () => {
   });
 
   it('rejects an unknown homeCity and invalid content', () => {
-    const bad = withValue(EMPTY_SCENARIO, ['companies'], [
-      { name: 'A', controller: 'player', startingCash: 1, homeCity: 'springfield' },
-    ]);
+    const bad = withValue(
+      EMPTY_SCENARIO,
+      ['companies'],
+      [{ name: 'A', controller: 'player', startingCash: 1, homeCity: 'springfield' }],
+    );
     expect(ScenarioSchema.safeParse(bad).success).toBe(false);
     expect(
-      ScenarioSchema.safeParse(withValue(VERTICAL_SLICE_SCENARIO, ['companies', 0, 'homeCity'], 'nowhere'))
-        .success,
+      ScenarioSchema.safeParse(
+        withValue(VERTICAL_SLICE_SCENARIO, ['companies', 0, 'homeCity'], 'nowhere'),
+      ).success,
     ).toBe(false);
     expect(
-      ScenarioSchema.safeParse(withValue(VERTICAL_SLICE_SCENARIO, ['content', 'cities'], {})).success,
+      ScenarioSchema.safeParse(withValue(VERTICAL_SLICE_SCENARIO, ['content', 'cities'], {}))
+        .success,
     ).toBe(false);
   });
 });
