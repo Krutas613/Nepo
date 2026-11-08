@@ -26,7 +26,20 @@ Only the `schema` agent edits `packages/sim/src/schema`. Every other agent reque
 - Consumers affected: which modules read/write this
 -->
 
-- (none)
+### REQ-001: carry the scenario in `Snapshot`
+
+- Requested by: engine
+- Date: 2026-11-08
+- Type: additive (optional field now; could become required at the next version bump)
+- Proposal: add `scenario?: Scenario` to `Snapshot` and `SnapshotEnvelope`, validated with
+  `ScenarioSchema.exactOptional()` in `SnapshotSchema`/`SnapshotEnvelopeSchema`. ARCHITECTURE.md 6.3
+  gives `World` a `scenario` and `TickContext` a `ctx.scenario`, but `restore(snapshot, systems)`
+  has no source for it, so a restored world is not fully self-contained. Until this lands the engine's
+  `restore` takes an optional third argument `{ scenario }` and otherwise uses a stub scenario
+  (`id: 'restored'`, the state's `epochYear`, no companies). M0 systems read the scenario only in
+  `init`, which `restore` never calls, so equivalence holds today. Once the field exists the engine
+  will write it in `snapshot()` and prefer it in `restore()`.
+- Consumers affected: engine (`snapshot`/`restore`), qa (snapshot equivalence tests), UI save/load.
 
 ## Resolved
 
