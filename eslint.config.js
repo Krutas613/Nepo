@@ -110,6 +110,23 @@ export default tseslint.config(
     rules: { '@typescript-eslint/consistent-type-definitions': ['error', 'interface'] },
   },
   {
+    // UI reads state and dispatches commands only (rule 1): public barrels, never sim internals.
+    files: ['packages/ui/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@nepo/sim/src/*', '**/packages/sim/**'],
+              message: 'UI imports only @nepo/sim public barrels (rule 1).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.test.ts', '**/*.spec.ts', 'packages/sim-tests/**/*.ts', 'packages/tools/**/*.ts'],
     rules: { 'no-console': 'off', '@typescript-eslint/no-non-null-assertion': 'off' },
   },
