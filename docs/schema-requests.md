@@ -50,6 +50,19 @@ Only the `schema` agent edits `packages/sim/src/schema`. Every other agent reque
 - Consumers affected: which modules read/write this
 -->
 
+### REQ-002: Milestone 1 schema (consolidated)
+
+- Requested by: architect (for economy, manufacturing, retail, finance, ui, content, qa)
+- Date: 2026-11-08
+- Type: breaking (`SCHEMA_VERSION` 1 -> 2)
+- Proposal: everything in `docs/design/schema-m1.md`: `ContentPack` + `assembleContentPack` +
+  `Scenario.content` (ADR-010), `InventoryLot` (ADR-012), four typed slices with `EMPTY_` constants
+  and `EMPTY_TYPED_SLICES`, eight commands, twenty-five events, `BankId`, revised content types,
+  migration note v1 -> v2 (install empty slices, replacing untyped values).
+- Consumers affected: engine (`MIGRATIONS[1]`, `createWorld` empty-slice install), accounting (none
+  in schema; accounts/builders are its own template), all M1 domain systems, ui, sim-tests
+  (regression hashes change once), tools (`validate-data` uses `assembleContentPack`).
+
 ## Resolved
 
 ### REQ-001: carry the scenario in `Snapshot`

@@ -6,8 +6,9 @@ how the law is implemented. Where it says **must**, an implementation that diffe
 says **implementer's call**, the owning agent decides and documents the choice in its module README or
 a code comment.
 
-Decisions with rationale live in `docs/decisions/` (ADR-001 .. ADR-009). Deeper per-module detail lives
-in `docs/design/engine.md` and `docs/design/accounting.md`.
+Decisions with rationale live in `docs/decisions/` (ADR-001 .. ADR-014). Deeper per-module detail lives
+in `docs/design/` (`engine.md`, `accounting.md`; M1: `economy.md`, `manufacturing.md`, `retail.md`,
+`finance.md`, `player-flow.md`, and the consolidated schema request `schema-m1.md`).
 
 ---
 
@@ -26,7 +27,7 @@ An arrow `A <- B` means B may import A. Nothing imports in the other direction. 
 | `schema/`                                                 | schema                          | `zod` only                                                   | Brands/IDs, `Money`, `Quantity`, `Result`, errors, `SystemId`, `Company`, `Scenario`, `WorldState` and all slice types, `Command`/`Event` unions, zod validators, fixtures                                                                                                                                                                                      |
 | `engine/`                                                 | engine                          | schema                                                       | `createWorld`, `step`, `submit`, `snapshot`, `restore`, `hashState`, `canonicalJson`, `findNonFinite`, `calendarFromTick`, `Rng`, `System`, `TickContext`, `Phase`, `ServiceKey`, `sortedKeys`, `DeepReadonly`, `ENGINE_VERSION`, plus the helpers its `index.ts` lists (`coreSystem`, `hashString`, `migrateSnapshot`, RNG primitives, `isWorldPoisoned`, ...) |
 | `accounting/`                                             | accounting                      | schema, engine                                               | `accountingSystem`, `ACCOUNTING_SERVICE`, `AccountingApi`, `ACCOUNTS`, `STANDARD_CHART`, rounding helpers, entry builders, `checkLedgerInvariants`, and the pure ledger/statement functions (for tests and tools; systems go through the service)                                                                                                               |
-| `economy/ manufacturing/ logistics/ retail/ finance/ hr/` | each its agent                  | schema, engine, accounting (and `economy` for price queries) | its `System` object and its `ServiceKey` + API                                                                                                                                                                                                                                                                                                                  |
+| `economy/ manufacturing/ logistics/ retail/ finance/ hr/` | each its agent                  | schema, engine, accounting, and the `index.ts` of systems **earlier in `SYSTEM_ORDER`** for their service key + API (M1: manufacturing and retail import `economy`; retail imports `manufacturing` for `withdraw`; finance imports `economy` for the policy rate). Never a later system. | its `System` object, its `ServiceKey` + API, its `check<Domain>Invariants`, pure helpers for previews                                                                                                                                                                                                                                                             |
 | `ai/`                                                     | ai-competitors                  | schema, engine, and any system's public API                  | `aiSystem`                                                                                                                                                                                                                                                                                                                                                      |
 | `index.ts` (sim root)                                     | orchestrator (composition root) | everything above                                             | `export *` of **schema and engine only**; each domain module as a namespace (`export * as accounting from './accounting/index.js'`); `DEFAULT_SYSTEMS` (M1)                                                                                                                                                                                                     |
 
@@ -72,10 +73,17 @@ interface WorldState {
   rng: Record<string, RngStreamState>; // stream name -> state (section 9)
   companies: Record<CompanyId, Company>; // core slice, owned by the engine's `core` system
   accounting: AccountingState; // owned by accounting (section 8)
-  // Milestone 1+: economy, manufacturing, retail, finance; M2: logistics; M3: ai; M4: hr.
-  // Each is added by the schema agent as a new required property (a schema version bump + migration).
+  economy: EconomyState; // M1 (schema v2): markets, commodity sources, macro indices
+  manufacturing: ManufacturingState; // M1: facilities, WIP, input/output lots
+  retail: RetailState; // M1: stores, shelf lots, prices, restock policies
+  finance: FinanceState; // M1: loans, credit status
+  // M2: logistics; M3: ai; M4: hr. Each is added by the schema agent as a new required property
+  // (a schema version bump + migration that installs the slice's EMPTY_ value).
 }
 ```
+
+Content (products, recipes, cities, tunables) is **not** state: it travels in `Scenario.content`
+(ADR-010), is validated by `assembleContentPack`, and is read by systems through `ctx.scenario.content`.
 
 Slice ownership: the system with `id: 'accounting'` is the only code that writes `state.accounting`;
 likewise for every other slice. The engine owns the non-slice fields and `companies` (through its
@@ -228,13 +236,13 @@ finance, ai, hr`. The engine sorts registered systems by this order, so caller o
 | --- | ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | 0   | `ingest`     | engine                                     | Drain `state.pendingCommands` (ascending `seq`), reject commands whose issuer is not in `state.companies` or whose type has no handler, route the rest to the handling system's inbox for this tick.                                                                   | Commands issued during tick t-1 (AI) or between ticks (player) take effect at the start of tick t; everyone sees the same inputs. |
 | 1   | `apply`      | all systems                                | Each system processes its routed commands: validate semantics (ownership, affordability), mutate own slice, post to the ledger, emit events, or `ctx.reject`.                                                                                                          | Decisions are applied before any simulation so the day's activity reflects them.                                                  |
-| 2   | `macro`      | economy                                    | Business cycle, inflation, rate environment, baseline regional demand for the day.                                                                                                                                                                                     | Depends on nothing produced today; everything else reads it.                                                                      |
-| 3   | `production` | manufacturing (hr later)                   | Consume inputs, produce outputs, operating costs.                                                                                                                                                                                                                      | Needs today's input prices (macro).                                                                                               |
-| 4   | `logistics`  | logistics                                  | Advance shipments, arrivals into warehouses/stores, fulfil transfer orders.                                                                                                                                                                                            | Needs today's production output.                                                                                                  |
-| 5   | `market`     | retail, economy, manufacturing (B2B sales) | Retail sales against demand, market clearing, B2B contract deliveries, markdowns.                                                                                                                                                                                      | Needs goods on shelves (logistics) and demand (macro).                                                                            |
-| 6   | `finance`    | finance                                    | Interest accrual, scheduled repayments, dividends, defaults, stock-price update, ratings.                                                                                                                                                                              | Needs the day's cash flows (market) to assess liquidity.                                                                          |
+| 2   | `macro`      | economy                                    | Macro indices (inflation, policy rate; M2 business cycle); update every reference price and commodity price from the **previous day's** tallies (ADR-011); open today's baseline demand.                                                                               | Depends on nothing produced today; everything else reads it. Prices for day t are fixed before anyone trades on day t.            |
+| 3   | `production` | manufacturing (hr later)                   | Construction completion, WIP completion, JIT input purchases (`EconomyApi.quoteRaw/buyRaw`), batch starts, daily operating cost, month-end depreciation.                                                                                                               | Needs today's input prices (macro).                                                                                               |
+| 4   | `logistics`  | logistics (M2)                             | Advance shipments, arrivals into warehouses/stores (`RetailApi.receive`), fulfil transfer orders. **M1: no handler**; retail restocks directly in `market` (ADR-013).                                                                                                 | Needs today's production output.                                                                                                  |
+| 5   | `market`     | retail; economy and manufacturing from M2  | Retail: construction completion, restock from own factories (`ManufacturingApi.withdraw`), then sales via `EconomyApi.clearConsumerMarket`, shrinkage, operating cost, month-end depreciation. M2: economy B2B/commodity clearing, manufacturing B2B deliveries. | Needs goods on shelves and today's demand/prices (macro). Economy runs before retail here, hence the previous-day tallies in macro. |
+| 6   | `finance`    | finance                                    | Daily overdraft check and penalty accrual (ADR-014); month-end interest accrual and scheduled repayments; missed payments and defaults. M3: dividends, stock price, ratings.                                                                                           | Needs the day's cash flows (market) to assess liquidity.                                                                          |
 | 7   | `close`      | accounting **only**                        | On `isMonthEnd`: accounting computes the month's statements, then quarter/year work (consolidation and tax from M2, the year-end closing entry). No other system may register `close`; period-end postings belong in the poster's own phase on `isMonthEnd` (ADR-009). | Runs after every money movement of the day so statements are complete and the closing entry leaves income accounts at zero.       |
-| 8   | `decide`     | ai                                         | Read state and today's events, submit commands for tick t+1 via `ctx.submit`.                                                                                                                                                                                          | AI sees the completed day exactly as the player will; its commands queue like the player's.                                       |
+| 8   | `decide`     | ai (M3; no handler in M1)                  | Read state and today's events, submit commands for tick t+1 via `ctx.submit`.                                                                                                                                                                                          | AI sees the completed day exactly as the player will; its commands queue like the player's.                                       |
 | 9   | `finalize`   | engine                                     | Seal the event log, `state.tick += 1`, run debug checks if requested.                                                                                                                                                                                                  | Nothing after this may touch state.                                                                                               |
 
 Systems may register handlers for phases 1-8 only. `ingest` and `finalize` are engine-only; registering
@@ -883,3 +891,59 @@ files, migrations with real steps. The sim root (`packages/sim/src/index.ts`, or
 follows the public-surface policy in section 1 from the end of M0: `export *` of schema and engine,
 `export * as accounting from './accounting/index.js'`, and from M1 one namespace per domain module plus
 `DEFAULT_SYSTEMS = [accountingSystem, economySystem, ...]` in `SYSTEM_ORDER`.
+
+### 15.1 Milestone 1 scope (vertical slice)
+
+One raw material, one consumer product, one factory type, one store format, one city/region/market,
+one NPC bank, player company only. Design docs are the contract; this section lists what ships.
+
+**schema** (v2, `docs/design/schema-m1.md`): `ContentPack` + `assembleContentPack` + `Scenario.content`
+(ADR-010), `InventoryLot`, slice types `EconomyState`/`ManufacturingState`/`RetailState`/`FinanceState`
+with `EMPTY_` constants and `EMPTY_TYPED_SLICES`, 8 commands, 25 events, `BankId`, revised content
+types, `SCHEMA_VERSION = 2` with the v1 -> v2 migration note.
+
+**engine**: `MIGRATIONS[1]` (install empty slices), `createWorld` installs `EMPTY_TYPED_SLICES` for
+unregistered typed slices. No phase or API change.
+
+**accounting**: accounts `1205 Inventory - Work in Progress` and `1230 Inventory - Merchandise`;
+builders `capex`, `inventoryPurchase`, `productionStart`, `productionComplete`, `internalTransfer`,
+`retailSale`, `inventoryWriteOff`; `AccountingApi.balanceSheet(entity)` and `latestReport(entity, kind)`
+read queries (`docs/design/accounting.md` sections 1, 2, 7).
+
+**economy** (`economy.md`, ADR-011): `macro` phase only; bounded relaxation reference prices, linear
+demand response, NPC commodity source, constant macro; `EconomyApi` with `clearConsumerMarket`,
+`quoteRaw`/`buyRaw`, `policyRate`; `checkEconomyInvariants`.
+
+**manufacturing** (`manufacturing.md`, ADR-012): `apply` + `production`; construction, WIP, JIT input
+purchase, lots valued at moving weighted average, depreciation on `isMonthEnd`; `ManufacturingApi.withdraw`
+posts the transfer; `checkManufacturingInvariants`.
+
+**retail** (`retail.md`, ADR-013): `apply` + `market`; restock-then-sell, `retailSale` postings, shrinkage
+hook, `RetailApi.receive` ready for M2 logistics; `checkRetailInvariants`.
+
+**finance** (`finance.md`, ADR-014): `apply` + `finance`; term loan (fixed rate = policy rate + tiered
+spread, straight-line amortisation, monthly accrual), overdraft backstop, missed payments and default
+flag; `FinanceApi` read-only; `checkFinanceInvariants`.
+
+**content**: `data/{products,recipes,facility_types,store_formats,regions,cities,markets}.json`,
+`data/economy/{pricing,macro,commodities}.json`, `data/finance/banks.json`,
+`data/scenarios/vertical_slice.json`; `packages/tools` `validate-data` and a loader that assembles a
+`Scenario` from files.
+
+**ui** (`player-flow.md`): `GameClock`, dashboard views, command forms, save/load; imports from
+`@nepo/sim` only.
+
+**qa**: invariants 3, 4 and the bounds part of 7 become active through the four `check*Invariants`
+exports plus the cross-system checks (lot values vs 1200/1205/1210/1230; PP&E vs 1500/1590; loans vs
+2500/2100; cash < 0 ⇒ overdrawn flag); sweep metrics `priceIndex`, `volatility`, event counts; the
+scripted human run of `player-flow.md` section 8; regression hashes updated once for the new slices.
+
+**Exit criteria (BUILD_INSTRUCTIONS M1):** a human builds a factory and a store, borrows, runs a
+year and sees correct statements; all invariants pass on 5 seeds x 5 years with `DEFAULT_SYSTEMS` on
+`vertical_slice` and on `smoke`.
+
+**Deferred to M2** (with reason): logistics/transit and lead times (ADR-013: one city, same owner);
+B2B sales and the economy `market` handler (no third-party buyers in M1); demand segmentation,
+business cycle, commodity shocks and capacity (constant macro keeps M1 stability testable);
+absorption costing/WIP refinements beyond ADR-012; subsidiaries and intercompany transfer pricing;
+journal retention; `facility.close`/`store.close` and disposals; AI (`decide` unused).

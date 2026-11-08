@@ -10,8 +10,10 @@ Companion to ARCHITECTURE.md section 8. Owner of the code: `accounting`. State t
 | 1000 | Cash                        | asset                                             | CASH               |
 | 1100 | Accounts Receivable         | asset                                             | RECEIVABLES        |
 | 1200 | Inventory - Raw Materials   | asset                                             | INVENTORY_RAW      |
+| 1205 | Inventory - Work in Progress (M1, ADR-012) | asset                              | INVENTORY_WIP      |
 | 1210 | Inventory - Finished Goods  | asset                                             | INVENTORY_FINISHED |
 | 1220 | Inventory - In Transit      | asset                                             | INVENTORY_TRANSIT  |
+| 1230 | Inventory - Merchandise (store shelves; M1, ADR-012) | asset                    | INVENTORY_MERCHANDISE |
 | 1500 | Property, Plant & Equipment | asset                                             | PPE                |
 | 1590 | Accumulated Depreciation    | asset (contra, credit balance)                    | ACCUM_DEPRECIATION |
 | 1800 | Investments in Subsidiaries | asset                                             | INVESTMENTS        |
@@ -66,6 +68,18 @@ Builders (all return `JournalEntryInput`, all take `source: SystemId`):
 | `creditPurchase(account, amount)`              | Dr `account` / Cr 2000                                                                                                                     |
 | `makeJournalEntry(lines, source, memo, meta?)` | generic assembler every builder uses; `meta` = `{ memo?, ref? }`                                                                           |
 | `closingEntry(entity)`                         | moves every non-zero 4-7xxx balance to 3100, ascending code order; `null` if nothing to close (built and posted by accounting at year end) |
+| **M1 additions (ADR-012, design docs)**        |                                                                                                                                            |
+| `capex(amount)`                                | Dr 1500 / Cr 1000 (facility or store build; manufacturing, retail)                                                                        |
+| `inventoryPurchase(amount)`                    | Dr 1200 / Cr 1000 (raw materials bought from the commodity source; manufacturing)                                                          |
+| `productionStart(materials, labor)`            | Dr 1205 `materials + labor` / Cr 1200 `materials` / Cr 1000 `labor` (labour line omitted when 0; manufacturing)                            |
+| `productionComplete(amount)`                   | Dr 1210 / Cr 1205 (manufacturing)                                                                                                          |
+| `internalTransfer(amount, destination)`        | Dr `destination` (M1: 1230) / Cr 1210 (posted by manufacturing inside `withdraw`; M2 logistics uses 1220)                                 |
+| `retailSale(revenue, cogs)`                    | Dr 1000 / Cr 4000 `revenue`; Dr 5000 / Cr 1230 `cogs` (cogs may be 0: omit pair; retail)                                                   |
+| `inventoryWriteOff(account, amount)`           | Dr 6900 / Cr `account` (shrinkage, spoilage; retail, manufacturing)                                                                        |
+
+Spend classes (ADR-014): `capex`, `inventoryPurchase`, `productionStart` (labour), `loanRepayment` from
+`loan.repay` are discretionary (caller checks `cash >= amount` first); `cashPurchase(OPEX_*)`,
+`depreciation`, `interestAccrual`, scheduled `loanRepayment`, `inventoryWriteOff` are non-discretionary.
 
 Builders are reachable as `accounting.payroll(...)` from the sim root or by name from
 `@nepo/sim/accounting` (ARCHITECTURE.md section 1 public-surface policy); their generic names are
@@ -154,7 +168,9 @@ linearity, which a test may assert.
 
 `AccountingApi` is a thin adapter over the pure ledger functions through the engine's `ServiceHandle`.
 Mutating methods (`openEntity`, `post`, `postOrThrow`) use `handle.slice()`; read-only methods
-(`balance`, `cash`, `hasEntity`, and any future query) read through `handle.state().accounting`, because
+(`balance`, `cash`, `hasEntity`, and the M1 queries `balanceSheet(entityId): BalanceSheet` (live, from
+current balances via the pure `balanceSheet(ledger)`) and `latestReport(entityId, kind: PeriodKind):
+PeriodReport | null` (last appended report of that kind), requested by finance) read through `handle.state().accounting`, because
 `handle.slice()` marks the slice as legitimately written for the caller's phase and would disable the
 engine's foreign-write check for a caller that only queried (ARCHITECTURE.md section 6.2). The service
 keeps no state of its own. Iteration inside accounting uses `Object.keys(x).sort()` or the engine's
