@@ -14,23 +14,11 @@
  */
 import { ACCOUNTING_SERVICE } from '../accounting/index.js';
 import { ECONOMY_SERVICE } from '../economy/index.js';
-import { sortedKeys, type System, type TickContext } from '../engine/index.js';
+import { sortedKeys, type System } from '../engine/index.js';
 import type { ManufacturingState } from '../schema/index.js';
 import { applyCommand, MANUFACTURING_COMMANDS, type CommandEnv } from './commands.js';
 import { runFacilityDay, type ProductionEnv } from './production.js';
-import {
-  MANUFACTURING_SERVICE,
-  createManufacturingApi,
-  type ManufacturingApiInternal,
-} from './service.js';
-
-function bindAccounting(ctx: TickContext<ManufacturingState>): void {
-  // Interim binding for the service (see service.ts); the cast is to the internal surface of our
-  // own service object.
-  (ctx.services.get(MANUFACTURING_SERVICE) as ManufacturingApiInternal).bindAccounting(
-    ctx.services.get(ACCOUNTING_SERVICE),
-  );
-}
+import { MANUFACTURING_SERVICE, createManufacturingApi } from './service.js';
 
 export const manufacturingSystem: System<ManufacturingState> = {
   id: 'manufacturing',
@@ -40,7 +28,6 @@ export const manufacturingSystem: System<ManufacturingState> = {
   },
   phases: {
     apply(ctx) {
-      bindAccounting(ctx);
       if (ctx.commands.length === 0) return;
       const accounting = ctx.services.get(ACCOUNTING_SERVICE);
       const env: CommandEnv = {
@@ -61,7 +48,6 @@ export const manufacturingSystem: System<ManufacturingState> = {
       for (const command of ctx.commands) applyCommand(ctx.slice, command, env);
     },
     production(ctx) {
-      bindAccounting(ctx);
       const ids = sortedKeys(ctx.slice.facilities);
       if (ids.length === 0) return;
       const accounting = ctx.services.get(ACCOUNTING_SERVICE);

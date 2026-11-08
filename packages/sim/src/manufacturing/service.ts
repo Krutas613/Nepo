@@ -4,13 +4,6 @@
  *
  * Ownership rule (ARCHITECTURE.md section 6.2): `handle.slice()` is a mutation declaration, so only
  * `withdraw` calls it; every read goes through `handle.state().manufacturing`.
- *
- * Accounting binding: `withdraw` posts the `internalTransfer` itself, atomically with the lot
- * change, but the engine's `ServiceHandle` exposes no service registry. Until it does, the
- * manufacturing system binds the `AccountingApi` into this service at the start of every `apply`
- * and `production` phase through the internal `bindAccounting` method (both precede `market`, the
- * only phase retail calls `withdraw` in, on fresh and on restored worlds alike). `withdraw` called
- * before the first such phase throws `InvariantError('manufacturing.accounting_unbound')`.
  */
 import {
   createServiceKey,
@@ -19,7 +12,7 @@ import {
   type ServiceHandle,
   type ServiceKey,
 } from '../engine/index.js';
-import { internalTransfer, type AccountingApi } from '../accounting/index.js';
+import { ACCOUNTING_SERVICE, internalTransfer } from '../accounting/index.js';
 import {
   InvariantError,
   err,
@@ -85,25 +78,16 @@ export interface ManufacturingApi {
   ): Result<Withdrawal, WithdrawError>;
 }
 
-/** Internal surface the manufacturing system uses on its own service; not exported from the barrel. */
-export interface ManufacturingApiInternal extends ManufacturingApi {
-  bindAccounting(accounting: AccountingApi): void;
-}
-
 export const MANUFACTURING_SERVICE: ServiceKey<ManufacturingApi> =
   createServiceKey<ManufacturingApi>('manufacturing');
 
 export function createManufacturingApi(
   handle: ServiceHandle<ManufacturingState>,
-): ManufacturingApiInternal {
-  let accounting: AccountingApi | null = null;
+): ManufacturingApi {
   /** Read-only view for queries; never `handle.slice()`. */
   const view = () => handle.state().manufacturing;
 
   return {
-    bindAccounting(api) {
-      accounting = api;
-    },
     facility(facilityId) {
       return view().facilities[facilityId] ?? null;
     },
@@ -141,12 +125,6 @@ export function createManufacturingApi(
           `${facilityId} has ${String(seenLot.quantity)} ${productId}, wanted ${String(qty)}`,
         );
       }
-      if (accounting === null) {
-        throw new InvariantError(
-          'manufacturing.accounting_unbound',
-          'ManufacturingApi.withdraw used before the first manufacturing phase bound accounting',
-        );
-      }
       const facility = handle.slice().facilities[facilityId];
       const lot = facility?.outputs[productId];
       if (facility === undefined || lot === undefined) {
@@ -158,7 +136,7 @@ export function createManufacturingApi(
       // Post first (a failure throws and poisons the world), then mutate: atomic from the caller's view.
       const cost = issueCost(lot, qty);
       if (cost > 0) {
-        accounting.postOrThrow(
+        handle.services.get(ACCOUNTING_SERVICE).postOrThrow(
           ownerId,
           internalTransfer(cost, destinationAccount, 'manufacturing', {
             ref: { kind: 'facility', id: facilityId },
