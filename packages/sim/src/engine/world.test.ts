@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   EMPTY_ACCOUNTING_STATE,
   EMPTY_SCENARIO,
+  EMPTY_TYPED_SLICES,
+  VERTICAL_SLICE_SCENARIO,
+  WorldStateSchema,
   InvariantError,
   SMOKE_SCENARIO,
   companyId,
@@ -11,6 +14,7 @@ import {
   type CommandRejectedEvent,
   type Event,
   type SystemId,
+  type TypedDomainSliceId,
 } from '../schema/index.js';
 import { hashState } from './hash.js';
 import {
@@ -59,13 +63,31 @@ function rejections(events: readonly Event[]): CommandRejectedEvent['payload'][]
     .map((e) => e.payload);
 }
 
-/** A system with an arbitrary slice, for wiring tests. */
+const TYPED_DOMAIN_IDS: readonly TypedDomainSliceId[] = [
+  'accounting',
+  'economy',
+  'manufacturing',
+  'retail',
+  'finance',
+];
+
+function isTypedDomainId(id: SystemId): id is TypedDomainSliceId {
+  return (TYPED_DOMAIN_IDS as readonly string[]).includes(id);
+}
+
+/**
+ * A system for wiring tests. Under a typed slice id its slice is a valid empty slice (a copy of
+ * `EMPTY_TYPED_SLICES[id]`); under an untyped id (`logistics`, `ai`, `hr`) it is arbitrary JSON.
+ */
 function probe(
   id: SystemId,
   phases: AnySystem['phases'],
   extra: Partial<AnySystem> = {},
 ): AnySystem {
-  return { id, handles: [], init: () => ({ probe: id }), phases, ...extra };
+  const init = isTypedDomainId(id)
+    ? () => JSON.parse(JSON.stringify(EMPTY_TYPED_SLICES[id])) as unknown
+    : () => ({ probe: id });
+  return { id, handles: [], init, phases, ...extra };
 }
 
 describe('createWorld', () => {
@@ -97,6 +119,43 @@ describe('createWorld', () => {
       ['company.founded', 1, 0, 'core'],
     ]);
     expect(world.systems.map((s) => s.id)).toEqual(['core']);
+  });
+
+  it('installs a mutable copy of EMPTY_TYPED_SLICES[id] for every unregistered typed slice', () => {
+    const world = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [] });
+    for (const id of TYPED_DOMAIN_IDS) {
+      expect(world.state[id]).toEqual(EMPTY_TYPED_SLICES[id]);
+      expect(world.state[id]).not.toBe(EMPTY_TYPED_SLICES[id]);
+      expect(Object.isFrozen(world.state[id])).toBe(false);
+    }
+    expect(WorldStateSchema.safeParse(world.state).success).toBe(true);
+    // Two worlds never share a slice object.
+    const other = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [] });
+    for (const id of TYPED_DOMAIN_IDS) expect(other.state[id]).not.toBe(world.state[id]);
+  });
+
+  it("a registered system's init value replaces the empty slice; others stay empty", () => {
+    const marker = { ...EMPTY_TYPED_SLICES.economy };
+    const economy: AnySystem = { id: 'economy', handles: [], init: () => marker, phases: {} };
+    const world = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [economy] });
+    expect(world.state.economy).toBe(marker);
+    expect(world.state.retail).toEqual(EMPTY_TYPED_SLICES.retail);
+  });
+
+  it('VERTICAL_SLICE_SCENARIO creates its companies; content stays on the scenario', () => {
+    const world = createWorld({ seed: 1, scenario: VERTICAL_SLICE_SCENARIO, systems: [] });
+    const companies = Object.values(world.state.companies);
+    expect(companies.map((c) => [c.name, c.controller])).toEqual(
+      VERTICAL_SLICE_SCENARIO.companies.map((c) => [c.name, c.controller]),
+    );
+    // `Company` has no homeCity field (schema/company.ts): it is scenario data, read by domain
+    // systems through ctx.scenario, as is the content pack.
+    for (const c of companies) expect(Object.keys(c).sort()).toEqual(
+      ['controller', 'foundedTick', 'id', 'name', 'parentId'],
+    );
+    expect(world.scenario.companies[0]?.homeCity).toBe(VERTICAL_SLICE_SCENARIO.companies[0]?.homeCity);
+    expect(world.scenario.content).toEqual(VERTICAL_SLICE_SCENARIO.content);
+    expect(WorldStateSchema.safeParse(world.state).success).toBe(true);
   });
 
   it('rejects invalid seeds, scenarios and system sets', () => {
@@ -173,10 +232,10 @@ describe('createWorld', () => {
       createService: () => ({ hello: () => 'hi' }),
     };
     const second: AnySystem = {
-      id: 'economy',
+      id: 'logistics',
       handles: [],
       init: (ctx) => {
-        order.push('economy');
+        order.push('logistics');
         return {
           greeting: ctx.services.get(KEY).hello(),
           companies: Object.keys(ctx.state.companies).length,
@@ -185,12 +244,9 @@ describe('createWorld', () => {
       phases: {},
     };
     const world = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [second, first] });
-    expect(order).toEqual(['accounting', 'economy']);
-    expect((world.state as unknown as Record<string, unknown>)['economy']).toEqual({
-      greeting: 'hi',
-      companies: 2,
-    });
-    expect(world.systems.map((s) => s.id)).toEqual(['core', 'accounting', 'economy']);
+    expect(order).toEqual(['accounting', 'logistics']);
+    expect(world.state.logistics).toEqual({ greeting: 'hi', companies: 2 });
+    expect(world.systems.map((s) => s.id)).toEqual(['core', 'accounting', 'logistics']);
   });
 });
 
@@ -293,6 +349,71 @@ describe('commands', () => {
     expect(world.state.companies[CO2]?.name).toBe('B2');
     expect(world.state.pendingCommands).toEqual([]);
     expect(events.every((e) => e.tick === 0)).toBe(true);
+  });
+
+  it('rejects every M1 command type with no_handler when its system is not registered', () => {
+    const world = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [] });
+    const types = [
+      'facility.build',
+      'facility.set_recipe',
+      'facility.set_production',
+      'store.build',
+      'store.set_price',
+      'store.set_restock_policy',
+      'loan.request',
+      'loan.repay',
+    ] as const;
+    // Injected directly: routing must not depend on the payload, so a stub payload suffices.
+    for (const type of types) {
+      world.state.commandSeq += 1;
+      world.state.pendingCommands.push({
+        type,
+        seq: world.state.commandSeq,
+        tick: 0,
+        issuer: CO1,
+        payload: {},
+      } as unknown as Command);
+    }
+    const { events } = step(world);
+    expect(rejections(events)).toEqual(
+      types.map((type, i) => ({
+        commandSeq: i + 1,
+        commandType: type,
+        issuer: CO1,
+        code: 'no_handler',
+        reason: `no system handles ${type}`,
+      })),
+    );
+    expect(events.every((e) => e.source === 'core')).toBe(true);
+  });
+
+  it('routes an M1 command type to the system whose handles lists it', () => {
+    const seen: string[] = [];
+    const finance = probe(
+      'finance',
+      {
+        apply(ctx) {
+          for (const c of ctx.commands) seen.push(c.type);
+        },
+      },
+      { handles: ['loan.request', 'loan.repay'] },
+    );
+    const world = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [finance] });
+    for (const type of ['loan.repay', 'store.build', 'loan.request'] as const) {
+      world.state.commandSeq += 1;
+      world.state.pendingCommands.push({
+        type,
+        seq: world.state.commandSeq,
+        tick: 0,
+        issuer: CO1,
+        payload: {},
+      } as unknown as Command);
+    }
+    const { events } = step(world);
+    expect(seen).toEqual(['loan.repay', 'loan.request']);
+    expect(rejections(events).map((r) => [r.commandType, r.code])).toEqual([
+      ['store.build', 'no_handler'],
+    ]);
   });
 
   it('submit returns invalid_shape for bad input and queues nothing', () => {
@@ -409,7 +530,7 @@ describe('debug checks', () => {
       }),
     };
     const user = {
-      id: 'economy',
+      id: 'logistics',
       handles: [],
       init: () => ({ count: 0 }),
       phases: {
@@ -425,7 +546,7 @@ describe('debug checks', () => {
     const world = createWorld({ seed: 1, scenario: SMOKE_SCENARIO, systems: [user, owner] });
     const { events } = step(world, { checkSliceOwnership: true, checkFinite: true });
     expect(events).toMatchObject([{ type: 'company.renamed', source: 'accounting', seq: 0 }]);
-    expect(Object.keys(world.state.rng).sort()).toEqual(['economy', 'economy/sub']);
+    expect(Object.keys(world.state.rng).sort()).toEqual(['logistics', 'logistics/sub']);
     expect(world.state.registry.counters.facility).toBe(1);
   });
 
@@ -440,28 +561,28 @@ describe('debug checks', () => {
     const KEY = createServiceKey<ShelfApi>('test.shelf');
     // Owner with an untyped plain-JSON slice under a real, not-yet-typed SystemId.
     const owner: System<Shelf> = {
-      id: 'retail',
+      id: 'hr',
       handles: [],
       init: () => ({ stock: 100 }),
       phases: {},
       serviceKey: KEY,
       createService: (handle): ShelfApi => ({
         // Reads go through handle.state(), so they do not declare a mutation (ARCHITECTURE 6.2).
-        stock: () => (handle.state().retail as unknown as Shelf).stock,
+        stock: () => (handle.state().hr as unknown as Shelf).stock,
         take(n) {
           handle.slice().stock -= n;
         },
       }),
     };
     const caller = (mode: 'service' | 'direct'): AnySystem =>
-      probe('economy', {
+      probe('logistics', {
         production(ctx) {
           const shelf = ctx.services.get(KEY);
           if (mode === 'service') {
             shelf.take(1);
           } else {
             const seen = shelf.stock();
-            (ctx.state.retail as unknown as Shelf).stock = seen - 1;
+            (ctx.state.hr as unknown as Shelf).stock = seen - 1;
           }
         },
       });
@@ -473,7 +594,7 @@ describe('debug checks', () => {
     });
     step(viaService, { checkSliceOwnership: true });
     step(viaService, { checkSliceOwnership: true });
-    expect(viaService.state.retail).toEqual({ stock: 98 });
+    expect(viaService.state.hr).toEqual({ stock: 98 });
 
     const direct = createWorld({
       seed: 1,
@@ -487,9 +608,9 @@ describe('debug checks', () => {
       expect(e).toBeInstanceOf(InvariantError);
       expect((e as InvariantError).code).toBe('slice.foreign_write');
       expect((e as InvariantError).details).toMatchObject({
-        system: 'economy',
+        system: 'logistics',
         phase: 'production',
-        slice: 'retail',
+        slice: 'hr',
         tick: 0,
       });
     }
@@ -536,7 +657,7 @@ describe('debug checks', () => {
   });
 
   it('checkFinite reports non-finite paths', () => {
-    const bad = probe('economy', {
+    const bad = probe('logistics', {
       finance(ctx) {
         (ctx.slice as Record<string, unknown>)['ratio'] = 0 / 0;
       },
@@ -547,7 +668,7 @@ describe('debug checks', () => {
       expect.unreachable();
     } catch (e) {
       expect((e as InvariantError).code).toBe('state.non_finite');
-      expect((e as InvariantError).details['paths']).toEqual(['$.economy.ratio']);
+      expect((e as InvariantError).details['paths']).toEqual(['$.logistics.ratio']);
     }
   });
 

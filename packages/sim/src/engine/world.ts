@@ -10,7 +10,7 @@
  * `step` never hashes, zod-validates or deep-copies state unless a `StepOptions` flag asks for it.
  */
 import {
-  EMPTY_ACCOUNTING_STATE,
+  EMPTY_TYPED_SLICES,
   InvariantError,
   ScenarioSchema,
   formatSchemaIssues,
@@ -20,7 +20,6 @@ import {
   type Command,
   type CommandInput,
   type CommandType,
-  type AccountingState,
   type CommandValidationError,
   type EntityKind,
   type Event,
@@ -29,6 +28,7 @@ import {
   type Result,
   type Scenario,
   type SystemId,
+  type TypedDomainSliceId,
   type WorldState,
 } from '../schema/index.js';
 import { calendarFromTick, type CalendarDate } from './calendar.js';
@@ -424,12 +424,24 @@ export function createWorld(options: CreateWorldOptions): World {
     registry: { counters: {} },
     rng: {},
     companies: {},
-    // Typed slice whose system may not be registered: a plain copy of schema's empty value (the
-    // constant is deep-frozen; `structuredClone` is not in the sim's ES2022-only lib). The system's
-    // init replaces it when registered (ARCHITECTURE.md section 2).
-    accounting: JSON.parse(canonicalJson(EMPTY_ACCOUNTING_STATE)) as AccountingState,
+    accounting: emptyTypedSlice('accounting'),
+    economy: emptyTypedSlice('economy'),
+    manufacturing: emptyTypedSlice('manufacturing'),
+    retail: emptyTypedSlice('retail'),
+    finance: emptyTypedSlice('finance'),
   };
   return buildWorld(state, scenario, options.systems, true);
+}
+
+/**
+ * A plain deep copy of schema's empty value for typed domain slice `id` (the constants are
+ * deep-frozen; `structuredClone` is not in the sim's ES2022-only lib). `createWorld` installs one for
+ * EVERY typed domain slice, so `WorldState` is complete from the first init on; a registered
+ * system's `init` then replaces its own (ARCHITECTURE.md section 2). The net effect is exactly
+ * "registered system's init value, else a copy of `EMPTY_TYPED_SLICES[id]`".
+ */
+export function emptyTypedSlice<K extends TypedDomainSliceId>(id: K): WorldState[K] {
+  return JSON.parse(canonicalJson(EMPTY_TYPED_SLICES[id])) as WorldState[K];
 }
 
 // -------------------------------------------------------------------------------------------------

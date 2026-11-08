@@ -35,11 +35,17 @@ function rename(ctx: TickContext<CompaniesSlice>, command: RenameCompanyCommand)
 }
 
 /**
- * Only `company.rename` is routed to core today. When `Command` grows, the call below stops
- * type-checking for the new members, forcing a dispatch on `command.type` here.
+ * Only `company.rename` is routed to core (`handles` below); the engine never delivers any other
+ * type here. The narrowing guards against a routing bug rather than silently ignoring a command.
  */
 function applyCommands(ctx: TickContext<CompaniesSlice>): void {
-  for (const command of ctx.commands) rename(ctx, command);
+  for (const command of ctx.commands) {
+    if (command.type === 'company.rename') {
+      rename(ctx, command);
+    } else {
+      ctx.reject(command, 'no_handler', `core does not handle ${command.type}`);
+    }
+  }
 }
 
 export const coreSystem: System<CompaniesSlice> = {
