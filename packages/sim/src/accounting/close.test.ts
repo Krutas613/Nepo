@@ -18,6 +18,7 @@ import {
   payroll,
 } from './builders.js';
 import { closePeriod } from './close.js';
+import { combineReports } from './statements.js';
 import { checkLedgerInvariants } from './invariants.js';
 import {
   createAccountingState,
@@ -201,6 +202,13 @@ describe('closePeriod', () => {
         expect(y.cashFlow.closingCash).toBe(ms[11]?.cashFlow.closingCash);
         // The year report is computed before the closing entry: it still shows the year's income.
         expect(y.income.revenue).toBeGreaterThan(0);
+        // Year report equals the sum of its four quarter reports (design doc section 5: the year
+        // is computed from `yearOpening`, quarters are sums of months; they agree by linearity).
+        const qs = quarters.slice(yi * 4, yi * 4 + 4);
+        expect(qs.map((q) => [q.year, q.month])).toEqual([3, 6, 9, 12].map((m) => [y.year, m]));
+        expect(combineReports('year', qs, { tick: y.tick, year: y.year, month: y.month })).toEqual(
+          y,
+        );
       });
       // The first month carries the opening capital as financing inflow.
       expect(months[0]?.cashFlow.openingCash).toBe(0);

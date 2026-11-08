@@ -5,7 +5,11 @@
  *   capital (Dr 1000 / Cr 3000) from `scenario.companies[i].startingCash`, matched by index (company
  *   `co_00000{i+1}` is scenario company `i`). A zero `startingCash` posts nothing (a zero line is
  *   invalid).
- * - `phases.close`: `closePeriod` on month ends.
+ * - `phases.close`: `closePeriod` on month ends. `close` is accounting-only (ADR-009; the engine
+ *   rejects any other system registering it). Domain systems post period-end entries (depreciation,
+ *   rent, payroll runs, tax provisions) in their own phase on the tick whose `ctx.date.isMonthEnd`
+ *   (or `isQuarterEnd`/`isYearEnd`); every domain phase precedes `close`, so by the time this runs
+ *   the day's books are complete.
  * - Service: `AccountingApi` under `ACCOUNTING_SERVICE`.
  * Handles no commands in M0.
  */

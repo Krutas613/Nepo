@@ -1,6 +1,7 @@
 /**
  * Period close (ARCHITECTURE.md section 8.4, docs/design/accounting.md section 5). Runs in the
- * `close` phase; a no-op unless the date is a month end.
+ * `close` phase, which is accounting-only (ADR-009); a no-op unless the date is a month end. It relies
+ * on every entry of the day already being in the ledger, not on which phase posted it.
  *
  * For each entity in sorted-key order:
  *   1. append a `month` report (movements since `monthOpening`);
@@ -10,9 +11,9 @@
  *   4. roll `monthOpening` to the current (post-closing) balances;
  *   5. emit `period.closed` once per appended report, in append order.
  *
- * Quarter opening (implementer's call, no extra state): the quarter report is the combination
- * (`combineReports`) of the month reports of that quarter already in `ledger.reports` (the current
- * month's included). Every statement figure is linear in the period movements, so summing the month
+ * Quarter reports (decided, docs/design/accounting.md section 5; no quarter-opening balances are
+ * stored) are the combination (`combineReports`) of the month reports of that quarter already in
+ * `ledger.reports` (the current month's included). Every statement figure is linear in the period movements, so summing the month
  * figures equals computing them from the quarter's opening balances; `openingCash` comes from the
  * quarter's first month report, the balance sheet and `closingCash` from the last. An entity opened
  * mid-quarter simply has fewer month reports in that quarter (it had all-zero balances before).

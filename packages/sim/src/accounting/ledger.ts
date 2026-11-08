@@ -2,13 +2,21 @@
  * The double-entry ledger as plain functions over `AccountingState` (ARCHITECTURE.md section 8.2,
  * docs/design/accounting.md section 2).
  *
- * These functions do not depend on the engine: they mutate only the `AccountingState` they are given
- * and reach the outside world only through the `LedgerEnv` callbacks (tick, ID issuing, event
- * emission). `accountingSystem` and the `AccountingApi` service are thin adapters over them.
+ * These functions do not depend on the engine at runtime (the only engine import is the type
+ * `DeepReadonly`): they mutate only the `AccountingState` they are given and reach the outside world
+ * only through the `LedgerEnv` callbacks (tick, ID issuing, event emission). `accountingSystem` and
+ * the `AccountingApi` service are thin adapters over them.
+ *
+ * Read-only functions (`hasEntity`, `getLedger`, `getBalance`, `accountOf`, `validateEntry`) accept a
+ * `ReadonlyAccountingState`, so the service can answer queries from `handle.state().accounting`
+ * without declaring a mutation (docs/design/accounting.md section 7). `getLedger` and `accountOf` are
+ * overloaded: a mutable argument yields a mutable result (for posting and close), a readonly one a
+ * readonly result.
  *
  * Balances are debit-normal signed for every account type: `balance += debit - credit`. Hence
  * Σ balance over an entity is 0 after every successful posting.
  */
+import type { DeepReadonly } from '../engine/system.js';
 import {
   InvariantError,
   ZERO_MONEY,
@@ -48,6 +56,9 @@ export interface LedgerEnv {
   /** Receives `ledger.posted` / `period.closed` events. */
   emit(event: EventInput): void;
 }
+
+/** The read-only view of the accounting slice (`handle.state().accounting`). */
+export type ReadonlyAccountingState = DeepReadonly<AccountingState>;
 
 /** An empty accounting slice. */
 export function createAccountingState(): AccountingState {
@@ -94,12 +105,20 @@ export function openEntity(
   return ledger;
 }
 
-export function hasEntity(state: AccountingState, entityId: CompanyId): boolean {
+export function hasEntity(state: ReadonlyAccountingState, entityId: CompanyId): boolean {
   return Object.hasOwn(state.entities, entityId);
 }
 
 /** The entity's ledger. Throws `InvariantError('accounting.unknown_entity')` if it is not open. */
-export function getLedger(state: AccountingState, entityId: CompanyId): EntityLedger {
+export function getLedger(state: AccountingState, entityId: CompanyId): EntityLedger;
+export function getLedger(
+  state: ReadonlyAccountingState,
+  entityId: CompanyId,
+): DeepReadonly<EntityLedger>;
+export function getLedger(
+  state: ReadonlyAccountingState,
+  entityId: CompanyId,
+): DeepReadonly<EntityLedger> {
   const ledger = Object.hasOwn(state.entities, entityId) ? state.entities[entityId] : undefined;
   if (ledger === undefined) {
     throw new InvariantError('accounting.unknown_entity', `no ledger for ${entityId}`, {
@@ -115,7 +134,7 @@ export function getLedger(state: AccountingState, entityId: CompanyId): EntityLe
  * that cannot exist is a bug, not an expected outcome).
  */
 export function getBalance(
-  state: AccountingState,
+  state: ReadonlyAccountingState,
   entityId: CompanyId,
   account: AccountCode,
 ): Money {
@@ -126,7 +145,15 @@ export function getBalance(
  * The account `code` of `ledger`. Throws `InvariantError('accounting.unknown_account')` if the chart
  * has no such account.
  */
-export function accountOf(ledger: EntityLedger, code: AccountCode): LedgerAccount {
+export function accountOf(ledger: EntityLedger, code: AccountCode): LedgerAccount;
+export function accountOf(
+  ledger: DeepReadonly<EntityLedger>,
+  code: AccountCode,
+): DeepReadonly<LedgerAccount>;
+export function accountOf(
+  ledger: DeepReadonly<EntityLedger>,
+  code: AccountCode,
+): DeepReadonly<LedgerAccount> {
   const acc = Object.hasOwn(ledger.accounts, code) ? ledger.accounts[code] : undefined;
   if (acc === undefined) {
     throw new InvariantError(
@@ -167,7 +194,7 @@ function fail(code: PostingErrorCode, message: string): Result<never, PostingErr
  * 6. `overflow`: some resulting balance would not be a safe integer.
  */
 export function validateEntry(
-  state: AccountingState,
+  state: ReadonlyAccountingState,
   entityId: CompanyId,
   entry: JournalEntryInput,
 ): Result<Map<AccountCode, number>, PostingError> {

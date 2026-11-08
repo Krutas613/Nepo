@@ -4,6 +4,12 @@
  *
  * Every method is a thin adapter over the pure ledger functions in `ledger.ts`, operating on the
  * accounting slice through the engine's `ServiceHandle`. The service keeps no state of its own.
+ *
+ * Implementation rule (ARCHITECTURE.md section 6.2, docs/design/accounting.md section 7):
+ * `handle.slice()` is a mutation declaration. It marks the accounting slice as legitimately written
+ * for the caller's phase, which turns off the engine's foreign-write check for that slice. So only the
+ * mutating methods (`openEntity`, `post`, `postOrThrow`) call `handle.slice()`; every read-only method
+ * (`balance`, `cash`, `hasEntity`, and any future query) reads `handle.state().accounting`.
  */
 import { createServiceKey, type ServiceHandle, type ServiceKey } from '../engine/index.js';
 import type {
@@ -24,6 +30,7 @@ import {
   postEntryOrThrow,
   type LedgerEnv,
   type PostingError,
+  type ReadonlyAccountingState,
 } from './ledger.js';
 
 export interface AccountingApi {
@@ -63,6 +70,8 @@ function envOf(handle: ServiceHandle<AccountingState>): LedgerEnv {
 }
 
 export function createAccountingApi(handle: ServiceHandle<AccountingState>): AccountingApi {
+  /** Read-only view for queries; never `handle.slice()` (that would declare a mutation). */
+  const view = (): ReadonlyAccountingState => handle.state().accounting;
   return {
     openEntity(entityId, parentId) {
       openEntity(handle.slice(), entityId, parentId ?? null);
@@ -74,13 +83,13 @@ export function createAccountingApi(handle: ServiceHandle<AccountingState>): Acc
       return postEntryOrThrow(handle.slice(), entityId, entry, envOf(handle));
     },
     balance(entityId, account) {
-      return getBalance(handle.slice(), entityId, account);
+      return getBalance(view(), entityId, account);
     },
     cash(entityId) {
-      return getBalance(handle.slice(), entityId, ACCOUNTS.CASH);
+      return getBalance(view(), entityId, ACCOUNTS.CASH);
     },
     hasEntity(entityId) {
-      return hasEntity(handle.slice(), entityId);
+      return hasEntity(view(), entityId);
     },
   };
 }
