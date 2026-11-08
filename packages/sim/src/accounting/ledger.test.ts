@@ -86,70 +86,73 @@ describe('postEntry validation table', () => {
       {
         name: 'unknown entity',
         entity: B,
-        lines: [line('1000', 5, 0), line('3000', 0, 5)],
+        lines: [line('a1000', 5, 0), line('a3000', 0, 5)],
         code: 'unknown_entity',
       },
       { name: 'no lines', lines: [], code: 'empty' },
-      { name: 'one line', lines: [line('1000', 5, 0)], code: 'empty' },
+      { name: 'one line', lines: [line('a1000', 5, 0)], code: 'empty' },
       {
         name: 'zero line (both sides 0)',
-        lines: [line('1000', 0, 0), line('3000', 0, 0)],
+        lines: [line('a1000', 0, 0), line('a3000', 0, 0)],
         code: 'invalid_line',
       },
       {
         name: 'both sides non-zero',
-        lines: [line('1000', 5, 5), line('3000', 0, 0)],
+        lines: [line('a1000', 5, 5), line('a3000', 0, 0)],
         code: 'invalid_line',
       },
       {
         name: 'negative debit',
-        lines: [line('1000', -5, 0), line('3000', 0, -5)],
+        lines: [line('a1000', -5, 0), line('a3000', 0, -5)],
         code: 'invalid_line',
       },
       {
         name: 'negative credit',
-        lines: [line('1000', 5, 0), line('3000', 0, -5)],
+        lines: [line('a1000', 5, 0), line('a3000', 0, -5)],
         code: 'invalid_line',
       },
       {
         name: 'fractional amount',
-        lines: [line('1000', 1.5, 0), line('3000', 0, 1.5)],
+        lines: [line('a1000', 1.5, 0), line('a3000', 0, 1.5)],
         code: 'invalid_line',
       },
       {
         name: 'NaN amount',
-        lines: [line('1000', Number.NaN, 0), line('3000', 0, 5)],
+        lines: [line('a1000', Number.NaN, 0), line('a3000', 0, 5)],
         code: 'invalid_line',
       },
       {
         name: 'unsafe amount',
-        lines: [line('1000', 2 ** 53, 0), line('3000', 0, 2 ** 53)],
+        lines: [line('a1000', 2 ** 53, 0), line('a3000', 0, 2 ** 53)],
         code: 'invalid_line',
       },
       {
         name: 'unknown account',
-        lines: [line('1000', 5, 0), line('8000', 0, 5)],
+        lines: [line('a1000', 5, 0), line('a8000', 0, 5)],
         code: 'unknown_account',
       },
-      { name: 'unbalanced', lines: [line('1000', 5, 0), line('3000', 0, 4)], code: 'unbalanced' },
+      { name: 'unbalanced', lines: [line('a1000', 5, 0), line('a3000', 0, 4)], code: 'unbalanced' },
       {
         name: 'unbalanced across several lines',
-        lines: [line('1000', 5, 0), line('1100', 5, 0), line('3000', 0, 9)],
+        lines: [line('a1000', 5, 0), line('a1100', 5, 0), line('a3000', 0, 9)],
         code: 'unbalanced',
       },
       {
         name: 'totals overflow',
         lines: [
-          line('1000', Number.MAX_SAFE_INTEGER, 0),
-          line('1100', Number.MAX_SAFE_INTEGER, 0),
-          line('3000', 0, Number.MAX_SAFE_INTEGER),
-          line('2000', 0, Number.MAX_SAFE_INTEGER),
+          line('a1000', Number.MAX_SAFE_INTEGER, 0),
+          line('a1100', Number.MAX_SAFE_INTEGER, 0),
+          line('a3000', 0, Number.MAX_SAFE_INTEGER),
+          line('a2000', 0, Number.MAX_SAFE_INTEGER),
         ],
         code: 'overflow',
       },
       {
         name: 'resulting balance overflow',
-        lines: [line('1000', Number.MAX_SAFE_INTEGER, 0), line('3000', 0, Number.MAX_SAFE_INTEGER)],
+        lines: [
+          line('a1000', Number.MAX_SAFE_INTEGER, 0),
+          line('a3000', 0, Number.MAX_SAFE_INTEGER),
+        ],
         code: 'overflow',
       },
     ];
@@ -160,7 +163,7 @@ describe('postEntry validation table', () => {
       openEntity(state, A);
       const env = makeEnv();
       // Seed a balance so the "resulting balance overflow" case starts from non-zero.
-      postEntryOrThrow(state, A, entryOf([line('1000', 10, 0), line('3000', 0, 10)]), env);
+      postEntryOrThrow(state, A, entryOf([line('a1000', 10, 0), line('a3000', 0, 10)]), env);
       const before = JSON.stringify(state);
       const issuedBefore = env.issued;
       const eventsBefore = env.events.length;
@@ -182,10 +185,10 @@ describe('postEntry validation table', () => {
     const state = createAccountingState();
     openEntity(state, A);
     // invalid_line wins over unknown_account and unbalanced
-    const r1 = postEntry(state, A, entryOf([line('9999', -1, 0), line('1000', 0, 7)]), makeEnv());
+    const r1 = postEntry(state, A, entryOf([line('a9999', -1, 0), line('a1000', 0, 7)]), makeEnv());
     expect(!r1.ok && r1.error.code).toBe('invalid_line');
     // unknown_account wins over unbalanced
-    const r2 = postEntry(state, A, entryOf([line('9999', 1, 0), line('1000', 0, 7)]), makeEnv());
+    const r2 = postEntry(state, A, entryOf([line('a9999', 1, 0), line('a1000', 0, 7)]), makeEnv());
     expect(!r2.ok && r2.error.code).toBe('unknown_account');
   });
 
@@ -193,7 +196,7 @@ describe('postEntry validation table', () => {
     const state = createAccountingState();
     openEntity(state, A);
     try {
-      postEntryOrThrow(state, A, entryOf([line('1000', 5, 0), line('3000', 0, 4)]), makeEnv());
+      postEntryOrThrow(state, A, entryOf([line('a1000', 5, 0), line('a3000', 0, 4)]), makeEnv());
       expect.unreachable();
     } catch (e) {
       expect(e).toBeInstanceOf(InvariantError);
@@ -251,7 +254,7 @@ describe('postEntry success', () => {
     const r = postEntryOrThrow(
       state,
       A,
-      entryOf([line('1000', 10, 0), line('1000', 0, 3), line('3000', 0, 7)]),
+      entryOf([line('a1000', 10, 0), line('a1000', 0, 3), line('a3000', 0, 7)]),
       makeEnv(),
     );
     expect('ref' in r).toBe(false);
@@ -262,7 +265,7 @@ describe('postEntry success', () => {
     const state = createAccountingState();
     openEntity(state, A);
     expect(() => getBalance(state, B, ACCOUNTS.CASH)).toThrow(/accounting.unknown_entity/);
-    expect(() => getBalance(state, A, accountCode('8888'))).toThrow(/accounting.unknown_account/);
+    expect(() => getBalance(state, A, accountCode('a8888'))).toThrow(/accounting.unknown_account/);
   });
 });
 
@@ -271,7 +274,7 @@ describe('checkLedgerInvariants', () => {
     const state = createAccountingState();
     openEntity(state, A);
     const env = makeEnv();
-    postEntryOrThrow(state, A, entryOf([line('1000', 10, 0), line('3000', 0, 10)]), env);
+    postEntryOrThrow(state, A, entryOf([line('a1000', 10, 0), line('a3000', 0, 10)]), env);
     expect(checkLedgerInvariants(state)).toEqual([]);
 
     const ledger = state.entities[A];
@@ -285,7 +288,7 @@ describe('checkLedgerInvariants', () => {
       tick: 0,
       memo: 'tampered',
       source: 'accounting',
-      lines: [line('1000', 5, 0), line('7777', 0, 4), line('3000', 1, 1)],
+      lines: [line('a1000', 5, 0), line('a7777', 0, 4), line('a3000', 1, 1)],
     });
     cash.balance = 1.5 as Money;
     const codes = checkLedgerInvariants(state).map((v) => v.code);

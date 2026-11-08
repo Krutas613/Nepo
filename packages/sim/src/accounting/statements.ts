@@ -258,3 +258,25 @@ export function combineReports(
     cashFlow: { ...cash },
   };
 }
+
+/** A deep copy of a report, detached from the ledger (reports in state must never be aliased). */
+function copyReport(r: DeepReadonly<PeriodReport>): PeriodReport {
+  return {
+    ...r,
+    income: { ...r.income, byAccount: { ...r.income.byAccount } },
+    balance: { ...r.balance, byAccount: { ...r.balance.byAccount } },
+    cashFlow: { ...r.cashFlow },
+  };
+}
+
+/**
+ * The last appended report of `kind` (reports are appended in close order, so this is the most
+ * recently closed period of that kind), as a detached copy; `null` if none exists.
+ */
+export function latestReport(ledger: LedgerView, kind: PeriodKind): PeriodReport | null {
+  for (let i = ledger.reports.length - 1; i >= 0; i--) {
+    const r = ledger.reports[i];
+    if (r?.kind === kind) return copyReport(r);
+  }
+  return null;
+}

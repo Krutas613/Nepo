@@ -197,6 +197,155 @@ export function payroll(amount: Money, source: SystemId, meta?: EntryMeta): Jour
   );
 }
 
+// ---------------------------------------------------------------------------------------------
+// M1 builders (ADR-012; docs/design/accounting.md section 2). Inventory moves between holder
+// accounts at carrying cost; the caller computes the cost with `allocateMoney` (ADR-012 issue rule).
+// ---------------------------------------------------------------------------------------------
+
+/** Capital expenditure (facility or store build): Dr 1500 PP&E / Cr 1000. Discretionary. */
+export function capex(amount: Money, source: SystemId, meta?: EntryMeta): JournalEntryInput {
+  return makeJournalEntry(
+    [dr(ACCOUNTS.PPE, amount), cr(ACCOUNTS.CASH, amount)],
+    source,
+    'Capital expenditure',
+    meta,
+  );
+}
+
+/** Raw materials bought for cash: Dr 1200 / Cr 1000. Discretionary. */
+export function inventoryPurchase(
+  amount: Money,
+  source: SystemId,
+  meta?: EntryMeta,
+): JournalEntryInput {
+  return makeJournalEntry(
+    [dr(ACCOUNTS.INVENTORY_RAW, amount), cr(ACCOUNTS.CASH, amount)],
+    source,
+    'Inventory purchase',
+    meta,
+  );
+}
+
+/**
+ * Batches enter production: Dr 1205 `materials + labor` / Cr 1200 `materials` / Cr 1000 `labor`.
+ * A zero credit side is omitted (no labour; or a recipe without inputs). Only the labour part spends
+ * cash; it is discretionary (ADR-014), so the caller checks `cash >= labor` first.
+ */
+export function productionStart(
+  materials: Money,
+  labor: Money,
+  source: SystemId,
+  meta?: EntryMeta,
+): JournalEntryInput {
+  const lines = [dr(ACCOUNTS.INVENTORY_WIP, addMoney(materials, labor))];
+  if (materials !== 0) lines.push(cr(ACCOUNTS.INVENTORY_RAW, materials));
+  if (labor !== 0) lines.push(cr(ACCOUNTS.CASH, labor));
+  return makeJournalEntry(lines, source, 'Production start', meta);
+}
+
+/** Batches finish: Dr 1210 Finished Goods / Cr 1205 Work in Progress. */
+export function productionComplete(
+  amount: Money,
+  source: SystemId,
+  meta?: EntryMeta,
+): JournalEntryInput {
+  return makeJournalEntry(
+    [dr(ACCOUNTS.INVENTORY_FINISHED, amount), cr(ACCOUNTS.INVENTORY_WIP, amount)],
+    source,
+    'Production complete',
+    meta,
+  );
+}
+
+/**
+ * Same-entity move of finished goods to another holder: Dr `destination` / Cr 1210. M1: destination
+ * `ACCOUNTS.INVENTORY_MERCHANDISE` (posted by manufacturing inside `withdraw`); M2 logistics uses
+ * `ACCOUNTS.INVENTORY_TRANSIT`.
+ */
+export function internalTransfer(
+  amount: Money,
+  destination: AccountCode,
+  source: SystemId,
+  meta?: EntryMeta,
+): JournalEntryInput {
+  return makeJournalEntry(
+    [dr(destination, amount), cr(ACCOUNTS.INVENTORY_FINISHED, amount)],
+    source,
+    'Internal transfer',
+    meta,
+  );
+}
+
+/**
+ * Store sale for cash: Dr 1000 / Cr 4000 `revenue`; and, if `cogs > 0`, Dr 5000 / Cr 1230 `cogs`
+ * (merchandise leaves the shelf at carrying cost).
+ */
+export function retailSale(
+  revenue: Money,
+  cogs: Money,
+  source: SystemId,
+  meta?: EntryMeta,
+): JournalEntryInput {
+  const lines = [dr(ACCOUNTS.CASH, revenue), cr(ACCOUNTS.SALES, revenue)];
+  if (cogs !== 0) lines.push(dr(ACCOUNTS.COGS, cogs), cr(ACCOUNTS.INVENTORY_MERCHANDISE, cogs));
+  return makeJournalEntry(lines, source, 'Retail sale', meta);
+}
+
+/** Shrinkage or spoilage: Dr 6900 Other Operating Expense / Cr `account` (the holder account). */
+export function inventoryWriteOff(
+  account: AccountCode,
+  amount: Money,
+  source: SystemId,
+  meta?: EntryMeta,
+): JournalEntryInput {
+  return makeJournalEntry(
+    [dr(ACCOUNTS.OPEX_OTHER, amount), cr(account, amount)],
+    source,
+    'Inventory write-off',
+    meta,
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Spend classes (ADR-014; docs/design/accounting.md section 2). Accounting only classifies; it never
+// refuses a balanced entry because of cash. The posting system applies the rule before posting
+// (reject the command with `insufficient_cash`, or scale the purchase down); finance owns the
+// overdraft that covers non-discretionary spend.
+// ---------------------------------------------------------------------------------------------
+
+/** ADR-014 spend class. */
+export type SpendClass = 'discretionary' | 'non_discretionary';
+
+/**
+ * The class of each spend the design docs name. Keys are postings, not builders, because
+ * `loanRepayment` and `cashPurchase` are classed by context:
+ * `loanRepaymentRequested` is a `loan.repay` command, `loanRepaymentScheduled` a scheduled payment
+ * or the month-end overdraft-interest settlement; `operatingCost` is `cashPurchase(ACCOUNTS.OPEX_*)`.
+ * For `productionStart` the discretionary amount is the labour (the only cash line).
+ */
+export const SPEND_CLASS = Object.freeze({
+  capex: 'discretionary',
+  inventoryPurchase: 'discretionary',
+  productionStart: 'discretionary',
+  loanRepaymentRequested: 'discretionary',
+  operatingCost: 'non_discretionary',
+  depreciation: 'non_discretionary',
+  interestAccrual: 'non_discretionary',
+  loanRepaymentScheduled: 'non_discretionary',
+  inventoryWriteOff: 'non_discretionary',
+} as const satisfies Record<string, SpendClass>);
+
+export type SpendKind = keyof typeof SPEND_CLASS;
+
+/**
+ * ADR-014 affordability rule: discretionary spend requires `cash >= amount` at posting time;
+ * non-discretionary spend is always allowed (it may take cash negative, covered by finance's
+ * overdraft).
+ */
+export function canSpend(spendClass: SpendClass, cash: Money, amount: Money): boolean {
+  return spendClass === 'non_discretionary' || cash >= amount;
+}
+
 /**
  * Year-end closing entry: moves every non-zero 4-7xxx balance into 3100 Retained Earnings
  * (each income account is posted to the opposite side of its balance; the net goes to 3100: a credit

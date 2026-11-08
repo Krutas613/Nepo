@@ -11,6 +11,7 @@
  * renumbered.
  */
 import {
+  ACCOUNT_CODE_PATTERN,
   InvariantError,
   accountCode,
   type AccountCode,
@@ -65,15 +66,12 @@ export interface ChartAccount {
   readonly type: AccountType;
 }
 
-/** Storage form of an account code (mirrors the schema's `ACCOUNT_CODE_PATTERN` for v2). */
-const CODE_FORM = /^a[1-7][0-9]{3}$/;
-
 /**
  * The numeric part of a code (`'a1205'` -> 1205). Throws
  * `InvariantError('accounting.invalid_account_code')` for anything not of the form `a[1-7]NNN`.
  */
 export function accountNumber(code: AccountCode): number {
-  if (!CODE_FORM.test(code)) {
+  if (!ACCOUNT_CODE_PATTERN.test(code)) {
     throw new InvariantError(
       'accounting.invalid_account_code',
       `not an account code of the form a1000..a7999: ${code}`,

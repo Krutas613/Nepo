@@ -1,6 +1,6 @@
 /**
- * Property: for any sequence of valid postings (interleaved with rejected unbalanced postings and
- * period closes), every entity keeps Σ balance === 0 and assets === liabilities + equity under the
+ * Property: for any sequence of valid postings (random balanced entries and every entry builder,
+ * interleaved with rejected unbalanced postings and period closes), every entity keeps Σ balance === 0 and assets === liabilities + equity under the
  * debit-normal signed-balance convention, and every report reconciles.
  */
 import fc from 'fast-check';
@@ -14,7 +14,28 @@ import {
   type JournalLine,
 } from '../schema/index.js';
 import { ACCOUNTS, STANDARD_CHART } from './chart.js';
-import { cr, dr } from './builders.js';
+import {
+  capex,
+  cashPurchase,
+  cashSale,
+  cr,
+  creditPurchase,
+  creditSale,
+  depreciation,
+  dr,
+  interestAccrual,
+  interestIncome,
+  internalTransfer,
+  inventoryPurchase,
+  inventoryWriteOff,
+  loanDrawdown,
+  loanRepayment,
+  openingCapital,
+  payroll,
+  productionComplete,
+  productionStart,
+  retailSale,
+} from './builders.js';
 import { closePeriod } from './close.js';
 import { checkLedgerInvariants } from './invariants.js';
 import { createAccountingState, getLedger, openEntity, postEntry } from './ledger.js';
@@ -50,8 +71,54 @@ const balancedLinesArb: fc.Arbitrary<JournalLine[]> = fc
     return lines;
   });
 
+const builderAmountArb = fc.integer({ min: 1, max: 10_000_000 }).map(money);
+const optionalAmountArb = fc.oneof(fc.constant(money(0)), builderAmountArb);
+const inventoryAccountArb = fc.constantFrom(
+  ACCOUNTS.INVENTORY_RAW,
+  ACCOUNTS.INVENTORY_WIP,
+  ACCOUNTS.INVENTORY_FINISHED,
+  ACCOUNTS.INVENTORY_TRANSIT,
+  ACCOUNTS.INVENTORY_MERCHANDISE,
+);
+
+/** Every entry builder with random valid amounts (cash may go negative: the ledger allows it). */
+const builderEntryArb: fc.Arbitrary<JournalEntryInput> = fc.oneof(
+  builderAmountArb.map((a) => openingCapital(a, 'accounting')),
+  fc.tuple(builderAmountArb, optionalAmountArb).map(([r, c]) => cashSale(r, c, 'retail')),
+  fc.tuple(builderAmountArb, optionalAmountArb).map(([r, c]) => creditSale(r, c, 'retail')),
+  fc.tuple(accountArb, builderAmountArb).map(([acc, a]) => cashPurchase(acc, a, 'retail')),
+  fc.tuple(accountArb, builderAmountArb).map(([acc, a]) => creditPurchase(acc, a, 'retail')),
+  builderAmountArb.map((a) => loanDrawdown(a, 'finance')),
+  fc
+    .tuple(optionalAmountArb, optionalAmountArb)
+    .filter(([p, i]) => p + i > 0)
+    .map(([p, i]) => loanRepayment(p, i, 'finance')),
+  builderAmountArb.map((a) => interestAccrual(a, 'finance')),
+  builderAmountArb.map((a) => interestIncome(a, 'finance')),
+  builderAmountArb.map((a) => depreciation(a, 'manufacturing')),
+  builderAmountArb.map((a) => payroll(a, 'hr')),
+  builderAmountArb.map((a) => capex(a, 'manufacturing')),
+  builderAmountArb.map((a) => inventoryPurchase(a, 'manufacturing')),
+  fc
+    .tuple(optionalAmountArb, optionalAmountArb)
+    .filter(([m, l]) => m + l > 0)
+    .map(([m, l]) => productionStart(m, l, 'manufacturing')),
+  builderAmountArb.map((a) => productionComplete(a, 'manufacturing')),
+  fc
+    .tuple(
+      builderAmountArb,
+      fc.constantFrom(ACCOUNTS.INVENTORY_MERCHANDISE, ACCOUNTS.INVENTORY_TRANSIT),
+    )
+    .map(([a, d]) => internalTransfer(a, d, 'manufacturing')),
+  fc.tuple(builderAmountArb, optionalAmountArb).map(([r, c]) => retailSale(r, c, 'retail')),
+  fc
+    .tuple(inventoryAccountArb, builderAmountArb)
+    .map(([acc, a]) => inventoryWriteOff(acc, a, 'retail')),
+);
+
 type Action =
   | { kind: 'post'; entity: number; lines: JournalLine[] }
+  | { kind: 'builder'; entity: number; input: JournalEntryInput }
   | { kind: 'unbalanced'; entity: number; lines: JournalLine[]; lineIndex: number; delta: number }
   | { kind: 'advance'; days: number };
 
@@ -62,6 +129,14 @@ const actionArb: fc.Arbitrary<Action> = fc.oneof(
       kind: fc.constant('post' as const),
       entity: fc.nat(2),
       lines: balancedLinesArb,
+    }),
+  },
+  {
+    weight: 6,
+    arbitrary: fc.record({
+      kind: fc.constant('builder' as const),
+      entity: fc.nat(2),
+      input: builderEntryArb,
     }),
   },
   {
@@ -92,7 +167,7 @@ describe('ledger property', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 3 }),
-        fc.array(actionArb, { maxLength: 60 }),
+        fc.array(actionArb, { maxLength: 80 }),
         (entityCount, actions) => {
           const state = createAccountingState();
           const env = makeTestEnv(0);
@@ -115,6 +190,9 @@ describe('ledger property', () => {
               if (action.kind === 'post') {
                 const r = postEntry(state, entity, entry(action.lines), env);
                 expect(r.ok).toBe(true);
+              } else if (action.kind === 'builder') {
+                const r = postEntry(state, entity, action.input, env);
+                expect(r.ok, action.input.memo).toBe(true);
               } else {
                 const i = action.lineIndex % action.lines.length;
                 const lines = action.lines.map((l, j) =>

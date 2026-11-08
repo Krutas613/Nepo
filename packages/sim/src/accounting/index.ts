@@ -11,6 +11,7 @@ export { ACCOUNTING_SERVICE, createAccountingApi, type AccountingApi } from './s
 export {
   ACCOUNTS,
   STANDARD_CHART,
+  accountNumber,
   accountTypeOf,
   cashFlowSectionOf,
   incomeLineOf,
@@ -22,6 +23,9 @@ export {
 } from './chart.js';
 export { allocateMoney, roundHalfAwayFromZero, scaleMoney } from './rounding.js';
 export {
+  SPEND_CLASS,
+  canSpend,
+  capex,
   cashPurchase,
   cashSale,
   closingEntry,
@@ -32,12 +36,20 @@ export {
   dr,
   interestAccrual,
   interestIncome,
+  internalTransfer,
+  inventoryPurchase,
+  inventoryWriteOff,
   loanDrawdown,
   loanRepayment,
   makeJournalEntry,
   openingCapital,
   payroll,
+  productionComplete,
+  productionStart,
+  retailSale,
   type EntryMeta,
+  type SpendClass,
+  type SpendKind,
 } from './builders.js';
 export {
   createAccountingState,
@@ -60,6 +72,8 @@ export {
   combineReports,
   incomeStatement,
   accountMovement,
+  latestReport,
+  type LedgerView,
   type OpeningBalances,
   type ReportDate,
 } from './statements.js';

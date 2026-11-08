@@ -13,14 +13,18 @@ import {
 } from '../engine/index.js';
 import {
   AccountingStateSchema,
+  INTEGER_LIKE_KEY_PATTERN,
   InvariantError,
   SMOKE_SCENARIO,
   companyId,
   money,
   type AccountCode,
   type AccountingState,
+  type BalanceSheet,
   type CompanyId,
   type Event,
+  type PeriodKind,
+  type PeriodReport,
   type Scenario,
 } from '../schema/index.js';
 import { ACCOUNTS, isIncomeAccount } from './chart.js';
@@ -29,9 +33,14 @@ import {
   cashSale,
   depreciation,
   interestAccrual,
+  internalTransfer,
+  inventoryPurchase,
   loanDrawdown,
   loanRepayment,
   payroll,
+  productionComplete,
+  productionStart,
+  retailSale,
 } from './builders.js';
 import { checkLedgerInvariants } from './invariants.js';
 import { accountOf, getLedger } from './ledger.js';
@@ -59,6 +68,18 @@ const scriptedPoster: System<Record<string, never>> = {
         api.postOrThrow(id, cashSale(money(price), money(cost), 'retail'));
         api.postOrThrow(id, payroll(money(ctx.rng.int(500, 5_000)), 'retail'));
         api.postOrThrow(id, interestAccrual(money(ctx.rng.int(1, 100)), 'retail'));
+        // M1 goods flow (ADR-012): raw -> WIP -> finished -> shelf -> sold, all at cost.
+        const materials = money(ctx.rng.int(100, 2_000));
+        const labor = money(ctx.rng.int(0, 500));
+        const unitCost = money(materials + labor);
+        api.postOrThrow(id, inventoryPurchase(materials, 'retail'));
+        api.postOrThrow(id, productionStart(materials, labor, 'retail'));
+        api.postOrThrow(id, productionComplete(unitCost, 'retail'));
+        api.postOrThrow(id, internalTransfer(unitCost, ACCOUNTS.INVENTORY_MERCHANDISE, 'retail'));
+        api.postOrThrow(
+          id,
+          retailSale(money(unitCost + ctx.rng.int(0, 1_000)), unitCost, 'retail'),
+        );
         if (ctx.date.isMonthStart) {
           api.postOrThrow(id, cashPurchase(ACCOUNTS.PPE, money(120_000), 'retail'));
           api.postOrThrow(id, depreciation(money(2_000), 'retail'));
@@ -108,6 +129,7 @@ describe('accountingSystem init', () => {
 
   it('matches startingCash by index and skips a zero opening capital', () => {
     const scenario: Scenario = {
+      ...SMOKE_SCENARIO,
       id: 'mixed',
       name: 'Mixed',
       epochYear: 1990,
@@ -126,7 +148,7 @@ describe('accountingSystem init', () => {
   it('works with no companies', () => {
     const world = createWorld({
       seed: 1,
-      scenario: { id: 'e', name: 'E', epochYear: 2000, companies: [] },
+      scenario: { ...SMOKE_SCENARIO, id: 'e', name: 'E', epochYear: 2000, companies: [] },
       systems: [accountingSystem],
     });
     expect(world.state.accounting).toEqual({ entities: {}, journal: [] });
@@ -178,6 +200,137 @@ describe('AccountingApi service', () => {
     expect(result.events.filter((e) => e.type === 'ledger.posted').map((e) => e.source)).toEqual([
       'accounting',
     ]);
+  });
+});
+
+describe('AccountingApi queries: balanceSheet and latestReport (M1, finance)', () => {
+  /**
+   * Probe (id 'ai', phase `decide`, which runs after `close`): records, per tick, the live balance
+   * sheet and the latest report of every kind, read through the service only.
+   */
+  interface Seen {
+    tick: number;
+    isMonthEnd: boolean;
+    live: BalanceSheet;
+    cash: number;
+    latest: Record<PeriodKind, PeriodReport | null>;
+  }
+  function probe(seen: Seen[]): System<Record<string, never>> {
+    return {
+      id: 'ai',
+      handles: [],
+      init: () => ({}),
+      phases: {
+        decide(ctx) {
+          const api = ctx.services.get(ACCOUNTING_SERVICE);
+          seen.push({
+            tick: ctx.tick,
+            isMonthEnd: ctx.date.isMonthEnd,
+            live: api.balanceSheet(P),
+            cash: api.cash(P),
+            latest: {
+              month: api.latestReport(P, 'month'),
+              quarter: api.latestReport(P, 'quarter'),
+              year: api.latestReport(P, 'year'),
+            },
+          });
+        },
+      },
+    };
+  }
+
+  it('balanceSheet is live; at a close tick it equals the month report balance sheet', () => {
+    const seen: Seen[] = [];
+    const world = newWorld(SMOKE_SCENARIO, [scriptedPoster, probe(seen)]);
+    for (let i = 0; i < 400; i++) step(world, { checkSliceOwnership: i < 65 });
+    expect(seen).toHaveLength(400);
+    let monthEnds = 0;
+    for (const s of seen) {
+      expect(s.live.assets).toBe(s.live.liabilities + s.live.equity);
+      expect(s.live.byAccount[ACCOUNTS.CASH]).toBe(s.cash);
+      if (s.isMonthEnd) {
+        monthEnds += 1;
+        const report = s.latest.month;
+        expect(report?.tick).toBe(s.tick);
+        if (s.latest.year?.tick !== s.tick) {
+          expect(s.live).toEqual(report?.balance);
+        } else {
+          // Year end: reports are built before the closing entry (design doc section 5), so the
+          // live sheet differs only in 3100, by exactly the closed year's result; totals agree.
+          const re = ACCOUNTS.RETAINED_EARNINGS;
+          const netIncome = s.latest.year.income.netIncome;
+          expect(s.live.byAccount[re]).toBe((report?.balance.byAccount[re] ?? 0) - netIncome);
+          expect(s.live).toEqual({
+            ...report?.balance,
+            byAccount: { ...report?.balance.byAccount, [re]: s.live.byAccount[re] },
+          });
+        }
+      }
+    }
+    expect(monthEnds).toBe(13);
+    // Live means live: it moves between closes while the last report stays put.
+    const mid = seen[44];
+    expect(mid?.latest.month?.tick).toBe(29);
+    expect(mid?.live).not.toEqual(mid?.latest.month?.balance);
+  });
+
+  it('latestReport returns the most recently closed report of the kind, or null', () => {
+    const seen: Seen[] = [];
+    const world = newWorld(SMOKE_SCENARIO, [scriptedPoster, probe(seen)]);
+    for (let i = 0; i < 400; i++) step(world);
+    const at = (tick: number): Seen => {
+      const s = seen[tick];
+      if (s === undefined) throw new Error(`no probe at ${String(tick)}`);
+      return s;
+    };
+    expect(at(0).latest).toEqual({ month: null, quarter: null, year: null });
+    expect(at(28).latest.month).toBeNull();
+    expect(at(29).latest.month).toMatchObject({ kind: 'month', year: 2000, month: 1, tick: 29 });
+    expect(at(88).latest.quarter).toBeNull();
+    expect(at(89).latest.quarter).toMatchObject({ kind: 'quarter', month: 3, tick: 89 });
+    expect(at(150).latest.quarter?.tick).toBe(89);
+    expect(at(358).latest.year).toBeNull();
+    expect(at(359).latest.year).toMatchObject({ kind: 'year', year: 2000, month: 12, tick: 359 });
+    expect(at(399).latest.year?.tick).toBe(359);
+    expect(at(399).latest.month).toMatchObject({ year: 2001, month: 1, tick: 389 });
+
+    // Same object content as the stored report, but a detached copy.
+    const reports = world.state.accounting.entities[P]?.reports ?? [];
+    const lastMonth = [...reports].reverse().find((r) => r.kind === 'month');
+    const copy = at(399).latest.month;
+    expect(copy).toEqual(lastMonth);
+    expect(copy).not.toBe(lastMonth);
+    if (copy !== null) {
+      copy.balance.byAccount[ACCOUNTS.CASH] = money(-1);
+      copy.income.byAccount[ACCOUNTS.SALES] = money(-1);
+    }
+    expect(lastMonth?.balance.byAccount[ACCOUNTS.CASH]).not.toBe(-1);
+    expect(lastMonth?.income.byAccount[ACCOUNTS.SALES]).not.toBe(-1);
+  });
+
+  it('both queries throw for an unknown entity and never declare a mutation', () => {
+    let ran = false;
+    const unknown = companyId('co_000009');
+    const reader: System<Record<string, never>> = {
+      id: 'finance',
+      handles: [],
+      init: () => ({}),
+      phases: {
+        finance(ctx) {
+          ran = true;
+          const api = ctx.services.get(ACCOUNTING_SERVICE);
+          expect(() => api.balanceSheet(unknown)).toThrow(/accounting.unknown_entity/);
+          expect(() => api.latestReport(unknown, 'month')).toThrow(/accounting.unknown_entity/);
+          expect(api.balanceSheet(P).assets).toBe(100_000_000);
+          // A buggy direct write after only queries must still be caught by the engine.
+          const foreign = ctx.state.accounting as unknown as AccountingState;
+          accountOf(getLedger(foreign, P), ACCOUNTS.CASH).balance = money(1);
+        },
+      },
+    };
+    const world = newWorld(SMOKE_SCENARIO, [reader]);
+    expect(() => step(world, { checkSliceOwnership: true })).toThrow(/slice.foreign_write|foreign/);
+    expect(ran).toBe(true);
   });
 });
 
@@ -300,6 +453,11 @@ describe('period close over 2 simulated years with the real engine', () => {
       expect(years[1]?.cashFlow.openingCash).toBe(years[0]?.cashFlow.closingCash);
       expect(years[0]?.cashFlow.financing).toBe(100_000_000 + 1_000_000 - 250_000);
       expect(years[0]?.cashFlow.investing).toBe(-12 * 120_000);
+      // Every unit made is sold the same day: the M1 holder accounts end each period at 0.
+      for (const r of reports) {
+        expect(r.balance.byAccount[ACCOUNTS.INVENTORY_WIP]).toBe(0);
+        expect(r.balance.byAccount[ACCOUNTS.INVENTORY_MERCHANDISE]).toBe(0);
+      }
     }
     expect(
       closedEvents.filter((e) => e.type === 'period.closed' && e.payload.kind === 'month'),
@@ -312,6 +470,17 @@ describe('period close over 2 simulated years with the real engine', () => {
     const busy = newWorld();
     for (let i = 0; i < 400; i++) step(busy);
     expect(AccountingStateSchema.safeParse(busy.state.accounting).success).toBe(true);
+    // Schema v2 ruling (schema-m1.md section 10): no record in the slice has an integer-like key.
+    const integerLike: string[] = [];
+    const walk = (v: unknown, path: string): void => {
+      if (v === null || typeof v !== 'object') return;
+      for (const [k, child] of Object.entries(v)) {
+        if (!Array.isArray(v) && INTEGER_LIKE_KEY_PATTERN.test(k)) integerLike.push(`${path}.${k}`);
+        walk(child, `${path}.${k}`);
+      }
+    };
+    walk(busy.state.accounting, 'accounting');
+    expect(integerLike).toEqual([]);
   });
 
   it('the accounting slice survives snapshot/restore', () => {

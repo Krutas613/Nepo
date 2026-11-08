@@ -9,21 +9,26 @@
  * `handle.slice()` is a mutation declaration. It marks the accounting slice as legitimately written
  * for the caller's phase, which turns off the engine's foreign-write check for that slice. So only the
  * mutating methods (`openEntity`, `post`, `postOrThrow`) call `handle.slice()`; every read-only method
- * (`balance`, `cash`, `hasEntity`, and any future query) reads `handle.state().accounting`.
+ * (`balance`, `cash`, `hasEntity`, `balanceSheet`, `latestReport`) reads `handle.state().accounting`.
+ * Query results are fresh copies, so a caller can never alias (and mutate) the slice through them.
  */
 import { createServiceKey, type ServiceHandle, type ServiceKey } from '../engine/index.js';
 import type {
   AccountCode,
   AccountingState,
+  BalanceSheet,
   CompanyId,
   JournalEntry,
   JournalEntryInput,
   Money,
+  PeriodKind,
+  PeriodReport,
   Result,
 } from '../schema/index.js';
 import { ACCOUNTS } from './chart.js';
 import {
   getBalance,
+  getLedger,
   hasEntity,
   openEntity,
   postEntry,
@@ -32,6 +37,7 @@ import {
   type PostingError,
   type ReadonlyAccountingState,
 } from './ledger.js';
+import { balanceSheet, latestReport } from './statements.js';
 
 export interface AccountingApi {
   /**
@@ -53,6 +59,17 @@ export interface AccountingApi {
   /** `balance(entityId, ACCOUNTS.CASH)`. */
   cash(entityId: CompanyId): Money;
   hasEntity(entityId: CompanyId): boolean;
+  /**
+   * Live balance sheet computed from the entity's current balances (not a stored report): equity
+   * includes the undistributed current-year result. Equals the month-close report's balance sheet
+   * when read at the close tick after `close`. Throws `InvariantError('accounting.unknown_entity')`.
+   */
+  balanceSheet(entityId: CompanyId): BalanceSheet;
+  /**
+   * The most recently closed report of `kind` for the entity (last appended), or `null` if none has
+   * been closed yet. Throws `InvariantError('accounting.unknown_entity')`.
+   */
+  latestReport(entityId: CompanyId, kind: PeriodKind): PeriodReport | null;
 }
 
 export const ACCOUNTING_SERVICE: ServiceKey<AccountingApi> =
@@ -90,6 +107,12 @@ export function createAccountingApi(handle: ServiceHandle<AccountingState>): Acc
     },
     hasEntity(entityId) {
       return hasEntity(view(), entityId);
+    },
+    balanceSheet(entityId) {
+      return balanceSheet(getLedger(view(), entityId));
+    },
+    latestReport(entityId, kind) {
+      return latestReport(getLedger(view(), entityId), kind);
     },
   };
 }
