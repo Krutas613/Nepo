@@ -69,9 +69,14 @@ step(world, opts):
   for phase of PHASE_ORDER[1..8]:
     for system of systems (SYSTEM_ORDER):
       fn = system.phases[phase]; if !fn continue
-      if opts.checkSliceOwnership: before = hash of every slice except system.id (+ core fields)
+      if opts.checkSliceOwnership:
+        exclude = { sliceKey(system.id), 'commandSeq', 'pendingCommands', 'registry', 'rng' }
+        before = hash of every top-level state field not in exclude; touched = {}
       fn(makeTickContext(system, phase, inbox[system.id] ?? [], events))
-      if opts.checkSliceOwnership: compare -> InvariantError('slice.foreign_write', {system, phase, slice})
+        // during fn, every ServiceHandle.slice() call adds the service owner's id to `touched`
+      if opts.checkSliceOwnership:
+        exclude += sliceKey(id) for id in touched
+        compare before/after over fields not in exclude -> InvariantError('slice.foreign_write', {system, phase, slice, tick})
   // finalize
   if opts.checkFinite: paths = findNonFinite(state); if paths.length: InvariantError('state.non_finite', {paths})
   state.tick += 1; world.lastEvents = events
@@ -82,10 +87,24 @@ step(world, opts):
 throws `InvariantError('commands.submit_outside_decide')` unless `phase === 'decide'`. `ctx.reject`
 emits `command.rejected` with `source = system.id`. Event `seq` is `events.length` at emission.
 
+Ownership-check semantics (ARCHITECTURE.md 6.2) are deliberate: ctx-mediated engine fields are
+excluded in every phase, and a slice reached through its owner's `ServiceHandle.slice()` during the
+handler is excluded for that handler only. `handle.slice()` is therefore a mutation declaration;
+services implement reads via `handle.state()`. Tightening allowed without an ADR: exclude
+`commandSeq`/`pendingCommands` only in `decide` (the only phase where `submit` is legal).
+
+System validation at `createWorld`/`restore` (`orderSystems`): `systems.reserved_id` (a registered
+system with id `core`), `systems.duplicate_id`, `systems.invalid_phase` (`ingest`/`finalize`),
+`systems.close_reserved` (a system other than `accounting` registers `close`; ADR-009),
+`services.missing_key`, then `commands.duplicate_handler` while building the routing table.
+
 The `core` system (`id: 'core'`, slice is `state.companies`) is implemented inside the engine, is
-always registered first, handles `company.rename` (reject `not_owner` if `issuer !== companyId`,
-`invalid_name` if empty after trim), and in `init` creates companies from `scenario.companies` in
-array order with `foundedTick: 0`, `parentId: null`.
+always registered first, and in `init` creates companies from `scenario.companies` in array order with
+`foundedTick: 0`, `parentId: null`, emitting `company.founded`. It handles `company.rename` with
+payload `{ name: string; companyId?: CompanyId }`: `target = payload.companyId ?? issuer`; reject
+`not_owner` if `target !== issuer`, then `unknown_company` if `target` is not in the slice, then
+`invalid_name` if `name` is empty after trim; otherwise store the trimmed name and emit
+`company.renamed`.
 
 ## 4. Canonical JSON and hash
 
@@ -97,28 +116,39 @@ so qa can fingerprint arbitrary strings (and the KAT can pin `hashString('nepo')
 
 ## 5. Snapshot and restore
 
-`snapshot(world)`: `state = JSON.parse(canonicalJson(world.state))`; return
-`{ format: 'nepo/snapshot', schemaVersion: SCHEMA_VERSION, engineVersion: ENGINE_VERSION, hash: hashState(state), state }`.
+`snapshot(world)`: refuse a poisoned world (`SnapshotError('poisoned')`);
+`state = JSON.parse(canonicalJson(world.state))`; return
+`{ format: 'nepo/snapshot', schemaVersion: SCHEMA_VERSION, engineVersion: ENGINE_VERSION, hash: hashState(state), scenario: world.scenario, state }`.
+The hash covers `state` only; `scenario` is immutable configuration, validated rather than hashed.
 
-`restore(snap, systems)`: `SnapshotSchema.parse` (throw `SnapshotError('invalid')` on failure);
-`if snap.schemaVersion > SCHEMA_VERSION` -> `SnapshotError('too_new')`; run migrations from
-`snap.schemaVersion` to `SCHEMA_VERSION` (each step is `(state: unknown) => unknown`; missing step ->
-`SnapshotError('no_migration')`); if no migration ran and `hashState(state) !== snap.hash` ->
-`SnapshotError('hash_mismatch')`; build `World` with the given systems **without calling `init`**
-(slices come from the snapshot), create services, `lastEvents = []`.
+`restore(input: unknown, systems, options?)`: `SnapshotEnvelopeSchema.safeParse` (throw
+`SnapshotError('invalid')` on failure); `if schemaVersion > SCHEMA_VERSION` -> `SnapshotError('too_new')`;
+run migrations from `schemaVersion` to `SCHEMA_VERSION` (each step is `(state: unknown) => unknown`;
+missing step -> `SnapshotError('no_migration')`; `options.migrations` overrides the table in tests);
+deep-validate with `SnapshotSchema` (`invalid`); re-canonicalise the state so the live object is
+independent of the input; if no migration ran and `hashState(state) !== hash` ->
+`SnapshotError('hash_mismatch')`; `scenario = snapshot.scenario` (already validated by
+`ScenarioSchema` inside `SnapshotSchema`; `scenario.epochYear !== state.epochYear` ->
+`SnapshotError('scenario_mismatch')`); build `World` with the given systems **without calling `init`**
+(slices come from the snapshot; a registered system with no slice key -> `InvariantError('restore.missing_slice')`),
+create services, `lastEvents = []`. There is no caller-supplied scenario: the snapshot is the only
+source, so `restore` is total over valid snapshots.
 
 ## 6. Test matrix (engine)
 
-| Test                 | Assertion                                                                           |
-| -------------------- | ----------------------------------------------------------------------------------- |
-| rng KAT              | first 4 outputs for fixed state and for `seedStream(42,'accounting')`               |
-| rng independence     | drawing from `economy` does not change the next value of `accounting`               |
-| int unbiased-ish     | fast-check: outputs within `[min,max]`; `range===1` draws nothing                   |
-| calendar             | ticks 0, 29, 30, 89, 90, 359, 360, 719 map to expected dates and flags              |
-| canonical JSON       | key order, `-0`, nested arrays, rejection of Map/undefined/NaN                      |
-| hash KAT             | `hashString('')` and `hashString('nepo')` pinned                                    |
-| determinism          | 2 fresh worlds (SMOKE_SCENARIO, no systems), 200 ticks, equal hash each tick        |
-| snapshot equivalence | snapshot at 73, restore, run to 200, hash equals uninterrupted run                  |
-| commands             | ordering by seq across issuers; unknown_issuer; no_handler; shape error from submit |
-| phases               | recording test system sees phases 1..8 in order, systems in SYSTEM_ORDER            |
-| ownership            | test system writing a foreign slice under `checkSliceOwnership` throws              |
+| Test                 | Assertion                                                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| rng KAT              | first 4 outputs for fixed state and for `seedStream(42,'accounting')`                           |
+| rng independence     | drawing from `economy` does not change the next value of `accounting`                           |
+| int unbiased-ish     | fast-check: outputs within `[min,max]`; `range===1` draws nothing                               |
+| calendar             | ticks 0, 29, 30, 89, 90, 359, 360, 719 map to expected dates and flags                          |
+| canonical JSON       | key order, `-0`, nested arrays, rejection of Map/undefined/NaN                                  |
+| hash KAT             | `hashString('')` and `hashString('nepo')` pinned                                                |
+| determinism          | 2 fresh worlds (SMOKE_SCENARIO, no systems), 200 ticks, equal hash each tick                    |
+| snapshot equivalence | snapshot at 73, restore, run to 200, hash equals uninterrupted run                              |
+| commands             | ordering by seq across issuers; unknown_issuer; no_handler; shape error from submit             |
+| phases               | recording test system sees phases 1..8 in order, systems in SYSTEM_ORDER                        |
+| close reserved       | a non-accounting system registering `close` -> `systems.close_reserved`                         |
+| ownership            | test system writing a foreign slice under `checkSliceOwnership` throws                          |
+| ownership (service)  | a write through the owner's service passes; a direct foreign write in the same phase throws     |
+| self-contained save  | `restore(JSON.parse(JSON.stringify(snapshot(w))), systems)` with no options restores `scenario` |

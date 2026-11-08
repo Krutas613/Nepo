@@ -51,17 +51,34 @@ lines); `invalid_line` (a side not a positive safe integer, both sides non-zero,
 
 Builders (all return `JournalEntryInput`, all take `source: SystemId`):
 
-| Builder                              | Lines                                                                                   |
-| ------------------------------------ | --------------------------------------------------------------------------------------- |
-| `openingCapital(amount)`             | Dr 1000 / Cr 3000                                                                       |
-| `cashSale(revenue, cogs)`            | Dr 1000 revenue, Cr 4000 revenue; Dr 5000 cogs, Cr 1210 cogs (cogs may be 0: omit pair) |
-| `cashPurchase(account, amount)`      | Dr `account` / Cr 1000                                                                  |
-| `loanDrawdown(amount)`               | Dr 1000 / Cr 2500                                                                       |
-| `loanRepayment(principal, interest)` | Dr 2500 principal, Dr 2100 interest (if accrued) / Cr 1000 total                        |
-| `interestAccrual(amount)`            | Dr 7000 / Cr 2100                                                                       |
-| `depreciation(amount)`               | Dr 6200 / Cr 1590                                                                       |
-| `payroll(amount)`                    | Dr 6100 / Cr 1000                                                                       |
-| `closingEntry(entity)`               | moves every 4-7xxx balance to 3100 (built by accounting at year end)                    |
+| Builder                                        | Lines                                                                                                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `openingCapital(amount)`                       | Dr 1000 / Cr 3000                                                                                                                          |
+| `cashSale(revenue, cogs)`                      | Dr 1000 revenue, Cr 4000 revenue; Dr 5000 cogs, Cr 1210 cogs (cogs may be 0: omit pair)                                                    |
+| `cashPurchase(account, amount)`                | Dr `account` / Cr 1000                                                                                                                     |
+| `loanDrawdown(amount)`                         | Dr 1000 / Cr 2500                                                                                                                          |
+| `loanRepayment(principal, interest)`           | Dr 2500 principal, Dr 2100 interest (if accrued) / Cr 1000 total                                                                           |
+| `interestAccrual(amount)`                      | Dr 7000 / Cr 2100                                                                                                                          |
+| `interestIncome(amount)`                       | Dr 1000 / Cr 7100                                                                                                                          |
+| `depreciation(amount)`                         | Dr 6200 / Cr 1590                                                                                                                          |
+| `payroll(amount)`                              | Dr 6100 / Cr 1000                                                                                                                          |
+| `creditSale(revenue, cogs)`                    | Dr 1100 revenue, Cr 4000 revenue; Dr 5000 cogs, Cr 1210 cogs (cogs may be 0: omit pair)                                                    |
+| `creditPurchase(account, amount)`              | Dr `account` / Cr 2000                                                                                                                     |
+| `makeJournalEntry(lines, source, memo, meta?)` | generic assembler every builder uses; `meta` = `{ memo?, ref? }`                                                                           |
+| `closingEntry(entity)`                         | moves every non-zero 4-7xxx balance to 3100, ascending code order; `null` if nothing to close (built and posted by accounting at year end) |
+
+Builders are reachable as `accounting.payroll(...)` from the sim root or by name from
+`@nepo/sim/accounting` (ARCHITECTURE.md section 1 public-surface policy); their generic names are
+intentional and will not be prefixed.
+
+### Period-end postings by other systems (ADR-009)
+
+`close` is accounting-only. A domain system that posts on a period boundary (depreciation, rent,
+payroll runs, finance's tax provision) posts in its **own phase** when `ctx.date.isMonthEnd` (or
+`isQuarterEnd`/`isYearEnd`). Accounting guarantees in return that, when `close` runs, every entry of
+the day is already in the ledger: it is included in that month's report and precedes the year-end
+closing entry. Accounting must not assume anything about _which_ phase an entry came from; it only
+relies on the engine's phase order.
 
 ## 3. Statements
 
@@ -105,21 +122,44 @@ presented positive by negating credit-normal figures.
 ```
 if !date.isMonthEnd return
 for entityId of sortedKeys(entities):
-  append report('month', monthOpening)
-  if date.isQuarterEnd: append report('quarter', quarterOpening)   // quarterOpening = monthOpening snapshot taken when month % 3 === 1 (store in slice? no: derive from the first month report of the quarter: implementer's call, document it)
-  if date.isYearEnd: yearReport = report('year', yearOpening); post closingEntry; append yearReport; yearOpening = balances
+  month = report('month', monthOpening); append month
+  if date.isQuarterEnd: append combineReports('quarter', monthReportsOfThisQuarter)   // see below
+  if date.isYearEnd: yearReport = report('year', yearOpening); post closingEntry (if non-null); append yearReport; yearOpening = balances
   monthOpening = balances
-  emit period.closed per report
+  emit period.closed per appended report, in append order
 ```
 
-The quarter opening derivation is the implementer's call provided no new state field is needed; if
-one is, file a schema request (additive).
+**Quarter reports are the sum of the quarter's month reports** (decided; no quarter-opening balances
+are stored). `combineReports` adds every flow figure (`IncomeStatement` lines and `byAccount`,
+`CashFlowStatement` sections and `netChange`), takes `openingCash` from the first month report and the
+`BalanceSheet` and `closingCash` from the last. This is exact because every statement figure is linear
+in the period's movements and all arithmetic is integer. The month reports of the current quarter are
+found by scanning `reports` backwards for `kind === 'month'` with the same `year` and `month` in the
+quarter's range; the current month's report is appended first so it is included. An entity opened
+mid-quarter has fewer month reports in that quarter (its balances were zero before). A quarter end with
+no month report is `InvariantError('accounting.quarter_without_months')`. The `year` report is **not** a
+sum: it is computed from `yearOpening` before the closing entry is posted; the two methods agree by
+linearity, which a test may assert.
 
 ## 6. Invariants and tests
 
-`checkLedgerInvariants(state)` returns `[]` or a list of `{ code, entityId?, entryId?, message }`:
-`entity.unbalanced` (Σ balance !== 0), `entry.unbalanced`, `entry.unknown_account`,
-`balance.unsafe`, `report.cashflow_mismatch`, `report.identity_mismatch`.
+`checkLedgerInvariants(state)` returns `[]` or a list of `LedgerInvariantViolation`
+`{ code, entityId?, entryId?, message }` with `LedgerInvariantCode` one of `entity.unbalanced`
+(Σ balance !== 0), `entry.unbalanced`, `entry.invalid_line`, `entry.unknown_account`,
+`balance.unsafe`, `report.cashflow_mismatch`, `report.identity_mismatch`. (Named
+`LedgerInvariantViolation`, not `InvariantViolation`, so it reads unambiguously next to the engine's
+`InvariantError`; that name stays even under the namespace policy.)
+
+## 7. Service implementation rules
+
+`AccountingApi` is a thin adapter over the pure ledger functions through the engine's `ServiceHandle`.
+Mutating methods (`openEntity`, `post`, `postOrThrow`) use `handle.slice()`; read-only methods
+(`balance`, `cash`, `hasEntity`, and any future query) read through `handle.state().accounting`, because
+`handle.slice()` marks the slice as legitimately written for the caller's phase and would disable the
+engine's foreign-write check for a caller that only queried (ARCHITECTURE.md section 6.2). The service
+keeps no state of its own. Iteration inside accounting uses `Object.keys(x).sort()` or the engine's
+`sortedKeys`; both are the same UTF-16 code-unit order, and the ledger's pure functions may use the
+former so they stay independent of the engine.
 
 Tests: posting validation table (one case per error code); fast-check property generating random
 balanced entries over the standard chart for 1-3 entities and asserting all invariants after each post

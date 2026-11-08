@@ -40,6 +40,10 @@ Only the `schema` agent edits `packages/sim/src/schema`. Every other agent reque
   `init`, which `restore` never calls, so equivalence holds today. Once the field exists the engine
   will write it in `snapshot()` and prefer it in `restore()`.
 - Consumers affected: engine (`snapshot`/`restore`), qa (snapshot equivalence tests), UI save/load.
+- architect: recommend **accept, as a required field** (`scenario: Scenario` on `Snapshot` and
+  `SnapshotEnvelope`, validated with `ScenarioSchema`), because a save must be self-contained and
+  `restore(snapshot, systems)` total; no snapshot pre-dates v1 so nothing needs migrating, and the
+  field is outside `state` so hashes are unchanged. ARCHITECTURE.md section 11 now specifies this.
 
 ## Resolved
 

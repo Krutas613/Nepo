@@ -6,7 +6,7 @@ how the law is implemented. Where it says **must**, an implementation that diffe
 says **implementer's call**, the owning agent decides and documents the choice in its module README or
 a code comment.
 
-Decisions with rationale live in `docs/decisions/` (ADR-001 .. ADR-008). Deeper per-module detail lives
+Decisions with rationale live in `docs/decisions/` (ADR-001 .. ADR-009). Deeper per-module detail lives
 in `docs/design/engine.md` and `docs/design/accounting.md`.
 
 ---
@@ -21,22 +21,31 @@ packages/ui, packages/tools, packages/sim-tests  ---- import only from @nepo/sim
 
 An arrow `A <- B` means B may import A. Nothing imports in the other direction. Concretely:
 
-| Directory (`packages/sim/src/...`)                        | Owner                           | May import                                                   | Exports (public surface via `index.ts`)                                                                                                                                                                                          |
-| --------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schema/`                                                 | schema                          | `zod` only                                                   | Brands/IDs, `Money`, `Quantity`, `Result`, errors, `SystemId`, `Company`, `Scenario`, `WorldState` and all slice types, `Command`/`Event` unions, zod validators, fixtures                                                       |
-| `engine/`                                                 | engine                          | schema                                                       | `createWorld`, `step`, `submit`, `snapshot`, `restore`, `hashState`, `canonicalJson`, `findNonFinite`, `calendarFromTick`, `Rng`, `System`, `TickContext`, `Phase`, `ServiceKey`, `sortedKeys`, `DeepReadonly`, `ENGINE_VERSION` |
-| `accounting/`                                             | accounting                      | schema, engine                                               | `accountingSystem`, `ACCOUNTING_SERVICE`, `AccountingApi`, `ACCOUNTS`, `STANDARD_CHART`, rounding helpers, entry builders, `checkLedgerInvariants`                                                                               |
-| `economy/ manufacturing/ logistics/ retail/ finance/ hr/` | each its agent                  | schema, engine, accounting (and `economy` for price queries) | its `System` object and its `ServiceKey` + API                                                                                                                                                                                   |
-| `ai/`                                                     | ai-competitors                  | schema, engine, and any system's public API                  | `aiSystem`                                                                                                                                                                                                                       |
-| `index.ts` (sim root)                                     | orchestrator (composition root) | everything above                                             | `export *` of each module plus `DEFAULT_SYSTEMS` (added after M0 lands)                                                                                                                                                          |
+| Directory (`packages/sim/src/...`)                        | Owner                           | May import                                                   | Exports (public surface via `index.ts`)                                                                                                                                                                                                                                                                                                                         |
+| --------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema/`                                                 | schema                          | `zod` only                                                   | Brands/IDs, `Money`, `Quantity`, `Result`, errors, `SystemId`, `Company`, `Scenario`, `WorldState` and all slice types, `Command`/`Event` unions, zod validators, fixtures                                                                                                                                                                                      |
+| `engine/`                                                 | engine                          | schema                                                       | `createWorld`, `step`, `submit`, `snapshot`, `restore`, `hashState`, `canonicalJson`, `findNonFinite`, `calendarFromTick`, `Rng`, `System`, `TickContext`, `Phase`, `ServiceKey`, `sortedKeys`, `DeepReadonly`, `ENGINE_VERSION`, plus the helpers its `index.ts` lists (`coreSystem`, `hashString`, `migrateSnapshot`, RNG primitives, `isWorldPoisoned`, ...) |
+| `accounting/`                                             | accounting                      | schema, engine                                               | `accountingSystem`, `ACCOUNTING_SERVICE`, `AccountingApi`, `ACCOUNTS`, `STANDARD_CHART`, rounding helpers, entry builders, `checkLedgerInvariants`, and the pure ledger/statement functions (for tests and tools; systems go through the service)                                                                                                               |
+| `economy/ manufacturing/ logistics/ retail/ finance/ hr/` | each its agent                  | schema, engine, accounting (and `economy` for price queries) | its `System` object and its `ServiceKey` + API                                                                                                                                                                                                                                                                                                                  |
+| `ai/`                                                     | ai-competitors                  | schema, engine, and any system's public API                  | `aiSystem`                                                                                                                                                                                                                                                                                                                                                      |
+| `index.ts` (sim root)                                     | orchestrator (composition root) | everything above                                             | `export *` of **schema and engine only**; each domain module as a namespace (`export * as accounting from './accounting/index.js'`); `DEFAULT_SYSTEMS` (M1)                                                                                                                                                                                                     |
 
 Rules:
 
 - `packages/sim` never imports `packages/ui`, React, Vite, or `node:*`. ESLint enforces it.
 - A system imports another system **only through its `index.ts`** (`@nepo/sim/accounting`, not
   `../accounting/ledger.js`). Relative imports inside the sim use `.js` extensions.
-- Every exported identifier in `@nepo/sim` is unique across modules (root does `export *`). Prefix
-  generic names with the module: `accountingSystem`, `ENGINE_VERSION`, `ACCOUNTING_SERVICE`.
+- **Public-surface policy.** The sim root flattens exactly two modules, schema and engine, because
+  every consumer needs both and they form one vocabulary (`WorldState`, `createWorld`, `Money`, ...).
+  Every domain module (accounting, economy, ...) is reachable in two ways only: its subpath
+  (`@nepo/sim/accounting`, the primary route for sim-internal imports, sim-tests and tools) and the
+  same-named namespace on the root (`import { accounting } from '@nepo/sim'; accounting.cashSale(...)`).
+  Domain barrels are therefore free to export generic names (`payroll`, `depreciation`, `postEntry`)
+  without cross-module clashes. Two naming rules still apply: (1) an identifier exported by schema or
+  engine is unique between those two modules and is never re-exported by a domain module; (2) the
+  three identifiers consumers compose with are prefixed with the module name regardless (`accountingSystem`,
+  `ACCOUNTING_SERVICE`, `AccountingApi`; later `economySystem`, `ECONOMY_SERVICE`, `EconomyApi`).
+  `DEFAULT_SYSTEMS` (root, M1) is the ordered array of every shipped `System` object.
 - Shared types live only in `schema/`. A system's slice type (`AccountingState`, later `EconomyState`)
   is a shared type because the UI and sim-tests read it, so it lives in `schema/` too. Systems request
   changes via `docs/schema-requests.md` (section 14).
@@ -73,6 +82,19 @@ likewise for every other slice. The engine owns the non-slice fields and `compan
 built-in `core` system). Cross-system effects happen only through (a) a read-only view of other
 slices, (b) calling the owning system's **service API** (section 6), or (c) **commands** (section 7).
 Events do not carry state between systems (ADR-007).
+
+Slice keys and typing (**must**). The slice key of a system is its `SystemId` (`core` -> `companies`);
+`SystemId` is a closed union owned by schema, so the set of possible top-level keys of `WorldState` is
+fixed. A slice is **typed** once schema has added it to the `WorldState` interface and
+`WorldStateSchema` (today: `companies`, `accounting`). A typed slice is always present in state: if its
+system is not registered, the engine fills it with the empty value schema exports for it (today
+`{ entities: {}, journal: [] }` for accounting; schema will export these as `EMPTY_<SLICE>` constants
+so the engine never hand-writes a slice shape). A slice whose type has **not** landed yet may still
+appear in state under its `SystemId` key (a test system, or a domain agent's work in progress):
+`WorldStateSchema` accepts it as `unknown` plain JSON, validates nothing inside it, and rejects any
+top-level key that is not a `SystemId` or an engine core field (section 11 and 14 give the rules this
+implies for saves and migrations). Contracts-first still holds for shipped code: a domain system does
+not merge into `DEFAULT_SYSTEMS` until its slice is typed.
 
 Collections rule (**must**):
 
@@ -182,11 +204,15 @@ const DAYS_PER_MONTH = 30,
 function calendarFromTick(tick: number, epochYear: number): CalendarDate;
 ```
 
-Period hooks: month-, quarter- and year-end work runs during the `close` phase (section 6) of the tick
-whose date has the corresponding flag set, after all economic activity of that day. Month-start work
-(e.g. resetting a monthly budget) runs on the tick with `isMonthStart` in the system's normal phase.
-Daily accruals use `annualRate / 360` so a year of daily accruals equals the annual rate exactly in
-expectation.
+Period hooks: there are no engine-level monthly hooks; a system detects period boundaries from
+`ctx.date` flags. **Period-end postings by domain systems** (depreciation, monthly rent, payroll runs,
+tax provisions proposed by finance, ...) are made in that system's **own normal phase** on the tick
+with `isMonthEnd` (ADR-009). The `close` phase is **reserved for accounting**: it computes statements
+and posts the quarter/year closing work after every money movement of the day, so every entry posted
+on a month-end tick lands in that month's report, and income accounts are exactly zero after the
+year-end closing entry. Month-start work (e.g. resetting a monthly budget) runs on the tick with
+`isMonthStart` in the system's normal phase. Daily accruals use `annualRate / 360` so a year of daily
+accruals equals the annual rate exactly in expectation.
 
 ---
 
@@ -198,23 +224,31 @@ Every call to `step(world)` executes the phases below in order. Within a phase, 
 canonical order `SYSTEM_ORDER` (schema): `core, accounting, economy, manufacturing, logistics, retail,
 finance, ai, hr`. The engine sorts registered systems by this order, so caller order is irrelevant.
 
-| #   | Phase        | Who                                        | What                                                                                                                                                                                                         | Why here                                                                                                                          |
-| --- | ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| 0   | `ingest`     | engine                                     | Drain `state.pendingCommands` (ascending `seq`), reject commands whose issuer is not in `state.companies` or whose type has no handler, route the rest to the handling system's inbox for this tick.         | Commands issued during tick t-1 (AI) or between ticks (player) take effect at the start of tick t; everyone sees the same inputs. |
-| 1   | `apply`      | all systems                                | Each system processes its routed commands: validate semantics (ownership, affordability), mutate own slice, post to the ledger, emit events, or `ctx.reject`.                                                | Decisions are applied before any simulation so the day's activity reflects them.                                                  |
-| 2   | `macro`      | economy                                    | Business cycle, inflation, rate environment, baseline regional demand for the day.                                                                                                                           | Depends on nothing produced today; everything else reads it.                                                                      |
-| 3   | `production` | manufacturing (hr later)                   | Consume inputs, produce outputs, operating costs.                                                                                                                                                            | Needs today's input prices (macro).                                                                                               |
-| 4   | `logistics`  | logistics                                  | Advance shipments, arrivals into warehouses/stores, fulfil transfer orders.                                                                                                                                  | Needs today's production output.                                                                                                  |
-| 5   | `market`     | retail, economy, manufacturing (B2B sales) | Retail sales against demand, market clearing, B2B contract deliveries, markdowns.                                                                                                                            | Needs goods on shelves (logistics) and demand (macro).                                                                            |
-| 6   | `finance`    | finance                                    | Interest accrual, scheduled repayments, dividends, defaults, stock-price update, ratings.                                                                                                                    | Needs the day's cash flows (market) to assess liquidity.                                                                          |
-| 7   | `close`      | accounting, then others                    | On `isMonthEnd`: accounting closes the period (statements), then quarter/year work (tax, closing entries). Other systems may hook `close` for month-end postings (depreciation) only when `date.isMonthEnd`. | Runs after every money movement of the day so statements are complete.                                                            |
-| 8   | `decide`     | ai                                         | Read state and today's events, submit commands for tick t+1 via `ctx.submit`.                                                                                                                                | AI sees the completed day exactly as the player will; its commands queue like the player's.                                       |
-| 9   | `finalize`   | engine                                     | Seal the event log, `state.tick += 1`, run debug checks if requested.                                                                                                                                        | Nothing after this may touch state.                                                                                               |
+| #   | Phase        | Who                                        | What                                                                                                                                                                                                                                                                   | Why here                                                                                                                          |
+| --- | ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | `ingest`     | engine                                     | Drain `state.pendingCommands` (ascending `seq`), reject commands whose issuer is not in `state.companies` or whose type has no handler, route the rest to the handling system's inbox for this tick.                                                                   | Commands issued during tick t-1 (AI) or between ticks (player) take effect at the start of tick t; everyone sees the same inputs. |
+| 1   | `apply`      | all systems                                | Each system processes its routed commands: validate semantics (ownership, affordability), mutate own slice, post to the ledger, emit events, or `ctx.reject`.                                                                                                          | Decisions are applied before any simulation so the day's activity reflects them.                                                  |
+| 2   | `macro`      | economy                                    | Business cycle, inflation, rate environment, baseline regional demand for the day.                                                                                                                                                                                     | Depends on nothing produced today; everything else reads it.                                                                      |
+| 3   | `production` | manufacturing (hr later)                   | Consume inputs, produce outputs, operating costs.                                                                                                                                                                                                                      | Needs today's input prices (macro).                                                                                               |
+| 4   | `logistics`  | logistics                                  | Advance shipments, arrivals into warehouses/stores, fulfil transfer orders.                                                                                                                                                                                            | Needs today's production output.                                                                                                  |
+| 5   | `market`     | retail, economy, manufacturing (B2B sales) | Retail sales against demand, market clearing, B2B contract deliveries, markdowns.                                                                                                                                                                                      | Needs goods on shelves (logistics) and demand (macro).                                                                            |
+| 6   | `finance`    | finance                                    | Interest accrual, scheduled repayments, dividends, defaults, stock-price update, ratings.                                                                                                                                                                              | Needs the day's cash flows (market) to assess liquidity.                                                                          |
+| 7   | `close`      | accounting **only**                        | On `isMonthEnd`: accounting computes the month's statements, then quarter/year work (consolidation and tax from M2, the year-end closing entry). No other system may register `close`; period-end postings belong in the poster's own phase on `isMonthEnd` (ADR-009). | Runs after every money movement of the day so statements are complete and the closing entry leaves income accounts at zero.       |
+| 8   | `decide`     | ai                                         | Read state and today's events, submit commands for tick t+1 via `ctx.submit`.                                                                                                                                                                                          | AI sees the completed day exactly as the player will; its commands queue like the player's.                                       |
+| 9   | `finalize`   | engine                                     | Seal the event log, `state.tick += 1`, run debug checks if requested.                                                                                                                                                                                                  | Nothing after this may touch state.                                                                                               |
 
 Systems may register handlers for phases 1-8 only. `ingest` and `finalize` are engine-only; registering
-them is an `InvariantError`. `ctx.submit` is legal only in phase `decide` (InvariantError otherwise).
-Period-end work is detected by the system from `ctx.date` flags; the engine does not have separate
-monthly hooks.
+them is `InvariantError('systems.invalid_phase')`. `close` is accounting-only: `createWorld`/`restore`
+throw `InvariantError('systems.close_reserved')` when a system whose `id` is not `accounting`
+registers it (the engine special-cases the id `accounting` here exactly as it does `core`; this is the
+one place the engine names a domain system). `ctx.submit` is legal only in phase `decide`
+(InvariantError otherwise). Period-end work is detected by the system from `ctx.date` flags; the
+engine does not have separate monthly hooks. Rationale for reserving `close` rather than ordering
+within it: a domain posting after accounting's close would silently land in the next month's report
+and, at year end, leave income accounts non-zero after the closing entry; a domain posting before it
+in `close` needs no `close` at all, since every domain phase already precedes `close`. Readers of
+fresh statements (`ai` in `decide`, the UI) see them the same tick; finance reads last month's report
+in its own phase one day later, which is the intended lag.
 
 ### 6.2 System interface
 
@@ -285,14 +319,34 @@ interface ServiceHandle<S> {
 type ServiceKey<T> = Brand<string, 'ServiceKey'> & { readonly __type?: T };
 function createServiceKey<T>(name: string): ServiceKey<T>;
 interface ServiceRegistry {
-  get<T>(key: ServiceKey<T>): T;
-} // InvariantError if missing
+  get<T>(key: ServiceKey<T>): T; // InvariantError('services.missing') if absent
+  has(key: ServiceKey<unknown>): boolean;
+}
 ```
 
+`ctx.scenario` is the immutable scenario the world was created from; it travels inside the snapshot
+(section 11), so a system may read it in any phase, not only in `init`.
+
 `DeepReadonly` is a type-level guard only; the engine does not freeze state (too slow). Ownership is
-enforced by review and by the engine's debug check `step(world, { checkSliceOwnership: true })`, which
-hashes every other slice before and after each system phase and throws `InvariantError('slice.foreign_write')`
-on a difference. sim-tests runs it on short runs.
+enforced by review and by the engine's debug check `step(world, { checkSliceOwnership: true })`,
+which sim-tests runs on short runs. Its exact semantics (**must**, so nobody "fixes" them):
+
+- Around each system phase handler the engine hashes every top-level field of `WorldState` except
+  (i) the running system's own slice and (ii) the engine-owned fields systems change only through
+  `ctx`/`handle` methods: `commandSeq`, `pendingCommands` (via `submit`), `registry` (via `issueId`),
+  `rng` (via `rng`/`rngFor`). A difference in any other field after the handler is
+  `InvariantError('slice.foreign_write', { system, phase, slice, tick })`.
+- A slice whose owner's **service** was used during the handler is also excluded: every call to
+  `ServiceHandle.slice()` marks the owning slice as touched for the current phase. This is what makes
+  `accounting.post(...)` from a domain phase legal while a direct write to `state.accounting` from the
+  same handler is caught (ADR-007: a service mutates only its own slice, on behalf of its caller).
+  Consequently `handle.slice()` is a **mutation declaration**: a service implements read-only methods
+  (`balance`, `cash`, `hasEntity`, queries in general) through `handle.state()`, never `handle.slice()`,
+  so that a read does not disable the check for that slice.
+- Known gaps, accepted: the check is per phase and hash-based, so it cannot attribute a foreign write
+  made through a service to the caller rather than the service author, and it does not run unless the
+  flag is set. It is a debug net under tests, not a security boundary; review remains the primary
+  enforcement.
 
 Services (ADR-007) are how a system exposes an API to others: accounting registers `AccountingApi`
 under `ACCOUNTING_SERVICE`; economy will register a price-query API, etc. A service may mutate only its
@@ -330,7 +384,10 @@ function createWorld(options: CreateWorldOptions): World;
 function step(world: World, options?: StepOptions): TickResult;
 function submit(world: World, command: CommandInput): Result<number, CommandValidationError>; // returns seq
 function snapshot(world: World): Snapshot;
-function restore(snapshot: Snapshot, systems: readonly AnySystem[]): World; // validates, migrates, rebuilds services
+function restore(snapshot: unknown, systems: readonly AnySystem[], options?: RestoreOptions): World; // validates, migrates, rebuilds services
+interface RestoreOptions {
+  migrations?: MigrationTable;
+} // test override only; a snapshot needs nothing else to restore
 function hashState(state: WorldState): string; // section 10
 function canonicalJson(value: unknown): string;
 function findNonFinite(value: unknown): string[]; // JSON paths of NaN/Infinity/-0
@@ -361,13 +418,14 @@ interface CommandBase {
 }
 interface RenameCompanyCommand extends CommandBase {
   type: 'company.rename';
-  payload: { name: string };
+  payload: { name: string; companyId?: CompanyId }; // target; omitted = the issuer itself
 }
 // M1 adds e.g. 'facility.build', 'store.open', 'store.set_price', 'loan.draw', ...
 type Command = RenameCompanyCommand /* | ... */;
 type CommandType = Command['type'];
 type CommandInput = DistributiveOmit<Command, 'seq' | 'tick'>; // what submit() takes
-const CommandSchema: z.ZodType<Command>; // discriminatedUnion('type', [...])
+const CommandSchema: z.ZodType<Command>; // discriminatedUnion('type', [...]), stamped commands
+const CommandInputSchema: z.ZodType<CommandInput>; // same without seq/tick; what submit() validates
 interface CommandValidationError {
   code: 'invalid_shape';
   issues: string[];
@@ -375,6 +433,10 @@ interface CommandValidationError {
 ```
 
 Naming: `type` is `'<domain>.<verb>'` in lower snake case. Payloads are plain data; IDs branded.
+Convention (**must**): a command that acts on an entity names its target in the payload (`companyId`,
+`facilityId`, ...) even when the only legal target is the issuer, so the handler can emit a `not_owner`
+rejection with a concrete target instead of silently acting on the issuer; the target may be optional
+only when "omitted = the issuer" is unambiguous, as in `company.rename`.
 
 Lifecycle:
 
@@ -394,7 +456,9 @@ Lifecycle:
 
 Each command type has exactly one handling system (engine checks `handles` for duplicates at
 `createWorld`; duplicate -> `InvariantError('commands.duplicate_handler')`). `company.rename` is
-handled by the engine's `core` system (M0 end-to-end test of routing, rejection and events).
+handled by the engine's `core` system (M0 end-to-end test of routing, rejection and events): target
+`payload.companyId ?? issuer`; rejections, in order, `not_owner` (target !== issuer), `unknown_company`,
+`invalid_name` (empty after trim); success stores the trimmed name and emits `company.renamed`.
 
 ### 7.2 Events
 
@@ -554,10 +618,16 @@ In phase `close` on `isMonthEnd`, for each entity in `sortedKeys(entities)`: com
 `IncomeStatement` (movements since `monthOpening` on 4-7xxx accounts), `BalanceSheet` (current
 balances), `CashFlowStatement` (indirect method from balance deltas, classification by code range in
 the design doc), append a `month` report, roll `monthOpening`. On `isQuarterEnd` also append a `quarter`
-report (movements since the quarter's first month opening). On `isYearEnd`: post the closing entry
-moving every 4-7xxx balance into `3100 Retained Earnings`, append a `year` report, roll `yearOpening`.
-Emit `period.closed` per report. Invariants after close: `netChange === closingCash - openingCash`;
-`assets === liabilities + equity`.
+report: the **sum of that quarter's month reports** (flows summed, `openingCash` from the first,
+balance sheet and `closingCash` from the last); no quarter-opening balances are stored. On `isYearEnd`:
+compute the `year` report from `yearOpening`, post the closing entry moving every 4-7xxx balance into
+`3100 Retained Earnings`, append the `year` report, roll `yearOpening`. Emit `period.closed` per
+report. Invariants after close: `netChange === closingCash - openingCash`;
+`assets === liabilities + equity`; every 4-7xxx balance is 0 after a year end.
+
+Because `close` is accounting-only and runs after every domain phase (section 6.1, ADR-009), a domain
+system that must post on a period boundary (depreciation, rent, payroll) posts in its own phase on the
+tick with `isMonthEnd`, and the entry is included in that month's statements.
 
 Tax and consolidation with intercompany elimination are M2 (section 15).
 
@@ -637,25 +707,44 @@ interface Snapshot {
   format: 'nepo/snapshot';
   schemaVersion: number; // of `state` as written
   engineVersion: string; // informational, never gates loading
-  hash: string; // hashState(state) at write time
+  hash: string; // hashState(state) at write time; covers `state` only
+  scenario: Scenario; // the scenario the world was created from (validated with ScenarioSchema)
   state: WorldState; // self-contained: seed, tick, rng streams, pendingCommands are inside
 }
+interface SnapshotEnvelope extends Omit<Snapshot, 'state'> {
+  state: unknown;
+} // read before migrating
 const SnapshotSchema: z.ZodType<Snapshot>; // deep-validates state (loading is rare; cost is acceptable)
+const SnapshotEnvelopeSchema: z.ZodType<SnapshotEnvelope>;
 ```
 
+A save is **self-contained**: `Snapshot` carries the scenario as well as the state, so `restore` needs
+nothing but the file and the system objects (REQ-001, accepted as a required field: no snapshot
+pre-dates it, so there is nothing to migrate; `scenario` is not part of `state` and therefore not
+hashed, which keeps regression hashes stable). The scenario is immutable configuration: `createWorld`
+validates it with `ScenarioSchema`, `restore` re-validates it and rejects `scenario.epochYear !==
+state.epochYear` with `SnapshotError('scenario_mismatch')`.
+
 `snapshot(world)` deep-copies via `JSON.parse(canonicalJson(state))` (also proves serializability).
-`restore(snapshot, systems)`: parse with `SnapshotSchema` (envelope and deep state); if
+`restore(input, systems)` accepts untrusted input: parse the envelope with `SnapshotEnvelopeSchema`
+(`SnapshotError('invalid')`); refuse `schemaVersion > SCHEMA_VERSION` (`too_new`); if
 `schemaVersion < SCHEMA_VERSION`, run `migrateSnapshot` (engine `migrations.ts`: an ordered table of
 `(fromVersion) => (state: unknown) => unknown` steps, one per version bump, authored by the engine
-agent from the schema agent's migration notes in `docs/schema-requests.md`); recompute the hash and
-compare with `snapshot.hash` **when no migration ran** (mismatch -> `SnapshotError('hash_mismatch')`);
-rebuild services. Snapshots from a newer schema are refused.
+agent from the schema agent's migration notes in `docs/schema-requests.md`; missing step ->
+`no_migration`); deep-validate with `SnapshotSchema`; recompute the hash and compare with
+`snapshot.hash` **when no migration ran** (mismatch -> `hash_mismatch`); require a slice for every
+registered system (`InvariantError('restore.missing_slice')`); rebuild services without calling `init`.
+
+Not-yet-typed slices in saves (section 2): `WorldStateSchema` accepts a plain-JSON value under any
+`SystemId` key that has no typed slice yet and validates nothing inside it. Such a key only ever exists
+in development builds and test fixtures. The migration step that introduces the typed slice **must
+replace** any pre-existing value under that key with the slice's initial value rather than trust it.
 
 Equivalence requirement (**must**, tested by engine and sim-tests): for any K, `restore(snapshot(worldAfterKTicks))`
 followed by `N-K` steps has the same hash as the uninterrupted `N`-tick run. This holds because
-everything a step reads is inside `WorldState`, including RNG streams and queued commands; services and
-systems are stateless outside their slices. Any system that keeps state in a closure or module variable
-breaks this and is rejected in review.
+everything a step reads is inside `WorldState` or the (immutable, snapshotted) scenario, including
+RNG streams and queued commands; services and systems are stateless outside their slices. Any system
+that keeps state in a closure or module variable breaks this and is rejected in review.
 
 ---
 
@@ -729,6 +818,15 @@ the change merges. Additive, optional-field changes do not bump the version. Sli
 event members, and zod validators are all schema territory; account templates, service APIs and system
 objects are not.
 
+Slices before their type lands (section 2): `WorldStateSchema` tolerates an untyped plain-JSON value
+under any `SystemId` key, and rejects every other unknown top-level key. This exists so engine, qa and
+domain agents can register throwaway or in-progress systems under real `SystemId`s in tests (including
+snapshot/restore round trips) without a schema change per test. It does **not** relax contracts-first
+for shipped code: a domain system joins `DEFAULT_SYSTEMS` only after schema has typed its slice, bumped
+`SCHEMA_VERSION`, and written the migration note; and that migration replaces any pre-existing untyped
+value under the key (section 11). Schema additionally exports an empty initial value per typed slice
+(`EMPTY_ACCOUNTING_STATE`, ...) that the engine uses for a typed slice whose system is not registered.
+
 Fast path during M0: because the three foundation agents work in parallel, each may land its module
 against the interfaces **as written in this document**. Discrepancies discovered at merge are resolved
 in favour of this document; if this document is wrong, the architect amends it and the ADR.
@@ -780,5 +878,8 @@ a regression snapshot of the final hash per seed, and the slice-ownership check 
 **Exit criteria (BUILD_INSTRUCTIONS M0):** empty sim runs 5 simulated years on 5 seeds, hash stable
 across repeat runs, ledger property tests pass, `pnpm check` is green.
 
-Deferred to M1+: all domain slices, content loading from `data/`, `DEFAULT_SYSTEMS` in the sim root,
-UI read/dispatch adapter, replay files, migrations with real steps.
+Deferred to M1+: all domain slices, content loading from `data/`, UI read/dispatch adapter, replay
+files, migrations with real steps. The sim root (`packages/sim/src/index.ts`, orchestrator-owned)
+follows the public-surface policy in section 1 from the end of M0: `export *` of schema and engine,
+`export * as accounting from './accounting/index.js'`, and from M1 one namespace per domain module plus
+`DEFAULT_SYSTEMS = [accountingSystem, economySystem, ...]` in `SYSTEM_ORDER`.
