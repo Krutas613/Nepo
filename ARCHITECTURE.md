@@ -322,6 +322,7 @@ interface ServiceHandle<S> {
   slice(): S; // current own slice (mutable)
   state(): DeepReadonly<WorldState>;
   scenario(): DeepReadonly<Scenario>; // same object as ctx.scenario; lets a service read content without per-phase re-binding
+  readonly services: ServiceRegistry; // live registry; call only EARLIER systems' services (later = dependency-direction violation, reviewed not enforced)
   tick(): number;
   date(): CalendarDate;
   issueId<K extends EntityKind>(kind: K): IdOf<K>;

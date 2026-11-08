@@ -9,6 +9,8 @@ import {
   SMOKE_SCENARIO,
   companyId,
   type AccountingState,
+  type CompanyId,
+  type Money,
   type Command,
   type CommandInput,
   type CommandRejectedEvent,
@@ -299,7 +301,68 @@ describe('createWorld', () => {
   });
 });
 
-__TEST__
+it('gives services handle.services: earlier ones at creation, the live registry afterwards', () => {
+  interface CashProbe {
+    cash(id: CompanyId): Money;
+    hasLater(): boolean;
+    unknown(): unknown;
+  }
+  const KEY = createServiceKey<CashProbe>('test.cash');
+  const LATER = createServiceKey<string>('test.later');
+  const UNKNOWN = createServiceKey<unknown>('test.unknown');
+  const atCreation: { accounting: boolean; later: boolean }[] = [];
+  const logistics = probe(
+    'logistics',
+    {},
+    {
+      serviceKey: KEY,
+      createService: (handle): CashProbe => {
+        atCreation.push({
+          accounting: handle.services.has(ACCOUNTING_SERVICE),
+          later: handle.services.has(LATER),
+        });
+        return {
+          cash: (id) => handle.services.get(ACCOUNTING_SERVICE).cash(id),
+          hasLater: () => handle.services.has(LATER),
+          unknown: () => handle.services.get(UNKNOWN),
+        };
+      },
+    },
+  );
+  const seen: { cash1: Money; cash2: Money; accounting1: Money; hasLater: boolean }[] = [];
+  const later = probe(
+    'ai',
+    {
+      decide: (ctx) => {
+        const api = ctx.services.get(KEY);
+        seen.push({
+          cash1: api.cash(CO1),
+          cash2: api.cash(CO2),
+          accounting1: ctx.services.get(ACCOUNTING_SERVICE).cash(CO1),
+          hasLater: api.hasLater(),
+        });
+        expect(codeOf(() => api.unknown())).toBe('services.missing');
+      },
+    },
+    { serviceKey: LATER, createService: () => 'later' },
+  );
+  const systems = [later, logistics, accountingSystem as AnySystem];
+  const world = createWorld({ seed: 4, scenario: SMOKE_SCENARIO, systems });
+  expect(atCreation).toEqual([{ accounting: true, later: false }]);
+  step(world);
+  expect(seen).toEqual([
+    { cash1: 100_000_000, cash2: 100_000_000, accounting1: 100_000_000, hasLater: true },
+  ]);
+
+  const restored = restore(JSON.parse(JSON.stringify(snapshot(world))) as unknown, systems);
+  expect(atCreation).toEqual([
+    { accounting: true, later: false },
+    { accounting: true, later: false },
+  ]);
+  step(restored);
+  expect(seen[1]).toEqual(seen[0]);
+});
+
 describe('step: phases', () => {
   it('runs phases 1..8 in PHASE_ORDER, systems in SYSTEM_ORDER, every tick', () => {
     const calls: [number, Phase, SystemId][] = [];
