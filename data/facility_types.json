@@ -1,0 +1,13 @@
+[
+  {
+    "id": "bread_plant",
+    "name": "Bread plant",
+    "kind": "factory",
+    "buildCost": 12000000,
+    "constructionTicks": 30,
+    "dailyOperatingCost": 40000,
+    "capacity": 200,
+    "storageCapacity": 2000,
+    "usefulLifeMonths": 240
+  }
+]

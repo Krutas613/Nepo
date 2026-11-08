@@ -1,0 +1,6 @@
+{
+  "alpha": 0.05,
+  "beta": 0.25,
+  "kappa": 0.3,
+  "maxCapture": 1.5
+}

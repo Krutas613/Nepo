@@ -44,7 +44,15 @@ export type StoreFormatId = Brand<string, 'StoreFormatId'>;
 /** Authored facility type (e.g. `steel_mill`); identifies a content `Facility` definition. */
 export type FacilityTypeId = Brand<string, 'FacilityTypeId'>;
 
-/** Four-digit chart-of-accounts code, e.g. `'1000'` (section 8). */
+/** Authored bank (finance content, `data/finance/banks.json`). */
+export type BankId = Brand<string, 'BankId'>;
+
+/**
+ * Chart-of-accounts code, stored letter-prefixed: `'a'` + four digits whose first digit is the
+ * account type `1`-`7`, e.g. `'a1000'` (schema v2, docs/design/schema-m1.md section 10). Docs write
+ * `1000` for readability; that always denotes the stored string `'a1000'`. String order of the
+ * stored form equals numeric order of the code.
+ */
 export type AccountCode = Brand<string, 'AccountCode'>;
 
 // ---------------------------------------------------------------------------------------------
@@ -119,6 +127,8 @@ export const cityId = (s: string): CityId => s as CityId;
 export const marketId = (s: string): MarketId => s as MarketId;
 export const storeFormatId = (s: string): StoreFormatId => s as StoreFormatId;
 export const facilityTypeId = (s: string): FacilityTypeId => s as FacilityTypeId;
+export const bankId = (s: string): BankId => s as BankId;
+/** Unchecked cast; pass the stored form, e.g. `accountCode('a1000')`. */
 export const accountCode = (s: string): AccountCode => s as AccountCode;
 
 // ---------------------------------------------------------------------------------------------
@@ -127,8 +137,20 @@ export const accountCode = (s: string): AccountCode => s as AccountCode;
 
 /** Authored slug pattern for content IDs. */
 export const SLUG_PATTERN = /^[a-z][a-z0-9_]*$/;
-/** Account code pattern: exactly four ASCII digits. */
-export const ACCOUNT_CODE_PATTERN = /^[0-9]{4}$/;
+/** Account code pattern (schema v2): `'a'`, a type digit 1-7, three more digits. Was `/^[0-9]{4}$/`. */
+export const ACCOUNT_CODE_PATTERN = /^a[1-7][0-9]{3}$/;
+
+/** Integer-like strings (`'0'`, `'1000'`). Never a record key in state (ARCHITECTURE.md section 2). */
+export const INTEGER_LIKE_KEY_PATTERN = /^\d+$/;
+
+/**
+ * General rule, enforced by validators: no `Record` in state has an integer-like key. Every record
+ * key schema in state either is this schema or (slugs, entity ids, account codes) cannot match an
+ * integer-like string by construction; schema's tests check each one.
+ */
+export const RecordKeySchema = z
+  .string()
+  .regex(/^(?!\d+$)/, 'integer-like keys are forbidden in state');
 
 /** Pattern for a registry-issued ID of `kind`: prefix, underscore, at least six digits. */
 export function entityIdPattern(kind: EntityKind): RegExp {
@@ -165,10 +187,11 @@ export const CityIdSchema = slugSchema<CityId>();
 export const MarketIdSchema = slugSchema<MarketId>();
 export const StoreFormatIdSchema = slugSchema<StoreFormatId>();
 export const FacilityTypeIdSchema = slugSchema<FacilityTypeId>();
+export const BankIdSchema = slugSchema<BankId>();
 
 export const AccountCodeSchema: z.ZodType<AccountCode, string> = z
   .string()
-  .regex(ACCOUNT_CODE_PATTERN, 'expected a four-digit account code')
+  .regex(ACCOUNT_CODE_PATTERN, "expected a stored account code like 'a1000'")
   .transform((s) => s as AccountCode);
 
 export const EntityKindSchema = z.enum([

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "bread_batch",
+    "name": "Bread batch",
+    "facilityType": "bread_plant",
+    "inputs": [{ "product": "wheat", "quantity": 2 }],
+    "outputs": [{ "product": "bread", "quantity": 4 }],
+    "durationTicks": 1,
+    "laborCostPerBatch": 300
+  }
+]

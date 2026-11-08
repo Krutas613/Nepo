@@ -1,0 +1,10 @@
+[
+  {
+    "id": "harbour_bay",
+    "name": "Harbour Bay consumer market",
+    "city": "harbour_bay",
+    "demand": [
+      { "product": "bread", "baseDailyDemand": 4000, "priceFactor": 1 }
+    ]
+  }
+]

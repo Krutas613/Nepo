@@ -1,0 +1,18 @@
+[
+  {
+    "id": "wheat",
+    "name": "Wheat (flour equivalent)",
+    "category": "raw",
+    "unit": "kg",
+    "basePrice": 40,
+    "elasticity": 0
+  },
+  {
+    "id": "bread",
+    "name": "Sandwich loaf",
+    "category": "consumer",
+    "unit": "loaf",
+    "basePrice": 250,
+    "elasticity": 0.6
+  }
+]

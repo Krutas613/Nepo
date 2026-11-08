@@ -1,0 +1,8 @@
+[
+  {
+    "product": "wheat",
+    "referenceDailyVolume": 400,
+    "alpha": 0.1,
+    "kappa": 0.25
+  }
+]

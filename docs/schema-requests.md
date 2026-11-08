@@ -65,6 +65,18 @@ Only the `schema` agent edits `packages/sim/src/schema`. Every other agent reque
   in schema; accounts/builders are its own template), all M1 domain systems, ui, sim-tests
   (regression hashes change once), tools (`validate-data` uses `assembleContentPack`).
 
+### REQ-003: optional income index on `City` (for demand segmentation)
+
+- Requested by: content (task brief: "one city (population, income index)")
+- Date: 2026-11-08
+- Type: additive
+- Proposal: add `incomeIndex?: number` (finite, > 0, relative to 1 = national median) to `City` in
+  `content.ts`/`schema-m1.md` section 3, optional so the M1 content files stay valid. Not written into
+  `data/cities.json` because `City` has no such field in `schema-m1.md`; M1 economy does not read it
+  (income segmentation is M2 per economy.md section 1). Only needed once the demand segmentation
+  design in economy.md is implemented; if game-design prefers to hold it in `Market` instead, say so.
+- Consumers affected: content (`data/cities.json`), economy (M2 segmentation), ui (city panel).
+
 ## Resolved
 
 ### REQ-001: carry the scenario in `Snapshot`

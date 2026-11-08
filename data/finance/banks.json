@@ -1,0 +1,20 @@
+[
+  {
+    "id": "coastal_savings",
+    "name": "Coastal Savings Bank",
+    "spreadTiers": [
+      { "maxLeverage": 0.5, "spread": 0.02 },
+      { "maxLeverage": 1, "spread": 0.035 },
+      { "maxLeverage": 2, "spread": 0.05 }
+    ],
+    "minEquity": 1000000,
+    "minTermMonths": 6,
+    "maxTermMonths": 60,
+    "minPrincipal": 500000,
+    "maxPrincipalToEquity": 1.5,
+    "latePenaltySpread": 0.05,
+    "defaultAfterMissed": 3,
+    "overdraftLimit": 5000000,
+    "overdraftAnnualRate": 0.18
+  }
+]

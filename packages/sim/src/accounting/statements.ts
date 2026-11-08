@@ -20,6 +20,7 @@
  *   openingCash = opening[1000]; closingCash = balance(1000). Classification: `cashFlowSectionOf`.
  *   Because Σ mv over all accounts === 0, netChange === closingCash - openingCash exactly.
  */
+import type { DeepReadonly } from '../engine/system.js';
 import {
   InvariantError,
   ZERO_MONEY,
@@ -35,30 +36,36 @@ import {
   type PeriodKind,
   type PeriodReport,
 } from '../schema/index.js';
-import { ACCOUNTS, cashFlowSectionOf, incomeLineOf } from './chart.js';
+import { ACCOUNTS, accountTypeOf, cashFlowSectionOf, incomeLineOf } from './chart.js';
 import { accountOf } from './ledger.js';
 
 /** Opening balances for a period, keyed by code; a missing code counts as 0. */
 export type OpeningBalances = Readonly<Partial<Record<AccountCode, Money>>>;
 
-function sortedCodes(ledger: EntityLedger): AccountCode[] {
+/**
+ * Statements only read the ledger, so they accept the read-only view too (the service answers
+ * `balanceSheet` queries from `handle.state()`, docs/design/accounting.md section 7).
+ */
+export type LedgerView = DeepReadonly<EntityLedger>;
+
+function sortedCodes(ledger: LedgerView): AccountCode[] {
   return Object.keys(ledger.accounts).sort() as AccountCode[];
 }
 
-function balanceOf(ledger: EntityLedger, code: AccountCode): Money {
+function balanceOf(ledger: LedgerView, code: AccountCode): Money {
   return accountOf(ledger, code).balance;
 }
 
 /** Movement of `code` since `opening`. */
 export function accountMovement(
-  ledger: EntityLedger,
+  ledger: LedgerView,
   opening: OpeningBalances,
   code: AccountCode,
 ): Money {
   return subMoney(balanceOf(ledger, code), opening[code] ?? ZERO_MONEY);
 }
 
-export function incomeStatement(ledger: EntityLedger, opening: OpeningBalances): IncomeStatement {
+export function incomeStatement(ledger: LedgerView, opening: OpeningBalances): IncomeStatement {
   let revenueMv = ZERO_MONEY;
   let cogs = ZERO_MONEY;
   let opex = ZERO_MONEY;
@@ -108,18 +115,22 @@ export function incomeStatement(ledger: EntityLedger, opening: OpeningBalances):
   };
 }
 
-export function balanceSheet(ledger: EntityLedger): BalanceSheet {
+/**
+ * Balance sheet from the ledger's current balances. Pure; computing it at any moment (not only at a
+ * close) is what `AccountingApi.balanceSheet` does.
+ */
+export function balanceSheet(ledger: LedgerView): BalanceSheet {
   let assets = ZERO_MONEY;
   let liabilitiesSigned = ZERO_MONEY;
   let equitySigned = ZERO_MONEY; // 3xxx and 4-7xxx
   const byAccount = {} as Record<AccountCode, Money>;
   for (const code of sortedCodes(ledger)) {
     const balance = balanceOf(ledger, code);
-    const lead = code[0];
-    if (lead === '1') assets = addMoney(assets, balance);
-    else if (lead === '2') liabilitiesSigned = addMoney(liabilitiesSigned, balance);
+    const type = accountTypeOf(code);
+    if (type === 'asset') assets = addMoney(assets, balance);
+    else if (type === 'liability') liabilitiesSigned = addMoney(liabilitiesSigned, balance);
     else equitySigned = addMoney(equitySigned, balance);
-    if (lead === '1' || lead === '2' || lead === '3') byAccount[code] = balance;
+    if (type === 'asset' || type === 'liability' || type === 'equity') byAccount[code] = balance;
   }
   return {
     assets,
@@ -130,7 +141,7 @@ export function balanceSheet(ledger: EntityLedger): BalanceSheet {
 }
 
 export function cashFlowStatement(
-  ledger: EntityLedger,
+  ledger: LedgerView,
   opening: OpeningBalances,
   netIncome: Money,
 ): CashFlowStatement {
@@ -165,7 +176,7 @@ export interface ReportDate {
 
 /** A full report for the period since `opening`, ending now. */
 export function buildReport(
-  ledger: EntityLedger,
+  ledger: LedgerView,
   opening: OpeningBalances,
   kind: PeriodKind,
   date: ReportDate,

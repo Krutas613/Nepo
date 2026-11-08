@@ -1,0 +1,13 @@
+[
+  {
+    "id": "corner_store",
+    "name": "Corner store",
+    "buildCost": 4000000,
+    "constructionTicks": 14,
+    "dailyOperatingCost": 25000,
+    "shelfCapacity": 1000,
+    "usefulLifeMonths": 120,
+    "categories": ["consumer"],
+    "shrinkagePerMille": 0
+  }
+]

@@ -147,3 +147,21 @@ export const MoneySchema: z.ZodType<Money, number> = SafeIntegerSchema.transform
 export const QuantitySchema: z.ZodType<Quantity, number> = NonNegativeIntegerSchema.transform(
   (n) => n as Quantity,
 );
+
+/** `Money` >= 0 (costs, carrying values, accumulated amounts). */
+export const NonNegativeMoneySchema: z.ZodType<Money, number> = MoneySchema.refine(
+  (m) => m >= 0,
+  'must not be negative',
+);
+
+/** `Money` >= 1 (prices; ARCHITECTURE.md section 4: every price is at least 1 minor unit). */
+export const PositiveMoneySchema: z.ZodType<Money, number> = MoneySchema.refine(
+  (m) => m >= 1,
+  'must be at least 1 minor unit',
+);
+
+/** `Quantity` >= 1. */
+export const PositiveQuantitySchema: z.ZodType<Quantity, number> = QuantitySchema.refine(
+  (q) => q >= 1,
+  'must be at least 1',
+);
