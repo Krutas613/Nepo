@@ -1,6 +1,7 @@
 /** Nepo `schema` module: shared types, brands, validators and fixtures. Owned by the `schema` agent. */
 export * from './ids.js';
 export * from './money.js';
+export * from './json.js';
 export * from './result.js';
 export * from './errors.js';
 export * from './system.js';

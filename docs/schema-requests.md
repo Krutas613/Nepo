@@ -6,6 +6,30 @@ Only the `schema` agent edits `packages/sim/src/schema`. Every other agent reque
 
 <!-- newest first: date, schema version, summary -->
 
+- 2026-11-08, schema v1 (no bump): M0 review follow-ups (ARCHITECTURE.md sections 2, 11, 14 as amended).
+  - **REQ-001 accepted as a required field.** `Snapshot.scenario: Scenario` and
+    `SnapshotEnvelope.scenario: Scenario`, validated with `ScenarioSchema` by both `SnapshotSchema`
+    and `SnapshotEnvelopeSchema`. Outside `state`, so `hashState` and regression hashes are unchanged.
+    No version bump: no v1 snapshot without it was ever released. **Engine action required:**
+    `snapshot()` must write `scenario`, `restore()` must use it (dropping the optional third argument
+    and the stub) and enforce `scenario_mismatch`; until then engine/sim-tests snapshot tests fail.
+    Note: because the envelope validates `scenario` before migrations run, a future breaking change
+    to `Scenario` would need its own ADR and envelope-level handling.
+  - **Untyped-slice policy.** `WorldState extends UntypedSlices`, where
+    `UntypedSlices = Partial<Record<UntypedSliceId, JsonValue>>` and
+    `UntypedSliceId = Exclude<SystemId, TypedSliceSystemId>`, with typed ids `core` and
+    `accounting` (core's typed slice is `companies`, so a top-level `core` key is rejected).
+    `WorldStateSchema` stays a strict object with one `JsonValueSchema.exactOptional()` key per
+    untyped id; any other unknown key is still rejected, and typed slices are validated as before.
+    New `json.ts`: `JsonValue` / `JsonValueSchema` (finite numbers, no `-0`, plain objects and arrays
+    only). Additive; shipped code must not read or write untyped slices.
+  - **Empty slice constants.** `EMPTY_ACCOUNTING_STATE` (deep-frozen `{ entities: {}, journal: [] }`)
+    in `accounting.ts`: what the engine installs (as a copy) when accounting is not registered. Every
+    future typed slice ships an `EMPTY_<SLICE>` constant next to its type. Additive.
+  - Migration notes: none. Rule for later slice typing: the step that types slice `X` removes `X` from
+    `UntypedSliceId`, adds a required property, bumps `SCHEMA_VERSION`, and its migration note says
+    "set `state.X = EMPTY_X` (replacing any existing untyped value)".
+
 - 2026-11-08, schema v1: initial M0 types (`packages/sim/src/schema`: ids, money, result, errors,
   system, company, scenario, world, accounting, commands, events, snapshot, content, fixtures;
   `SCHEMA_VERSION = 1`). Additions beyond ARCHITECTURE.md, all additive: optional
@@ -26,6 +50,8 @@ Only the `schema` agent edits `packages/sim/src/schema`. Every other agent reque
 - Consumers affected: which modules read/write this
 -->
 
+## Resolved
+
 ### REQ-001: carry the scenario in `Snapshot`
 
 - Requested by: engine
@@ -44,7 +70,7 @@ Only the `schema` agent edits `packages/sim/src/schema`. Every other agent reque
   `SnapshotEnvelope`, validated with `ScenarioSchema`), because a save must be self-contained and
   `restore(snapshot, systems)` total; no snapshot pre-dates v1 so nothing needs migrating, and the
   field is outside `state` so hashes are unchanged. ARCHITECTURE.md section 11 now specifies this.
-
-## Resolved
-
-- (none)
+- **Outcome (schema, 2026-11-08): accepted, as a required field** per the architect's recommendation
+  and ARCHITECTURE.md section 11: `scenario: Scenario` on `Snapshot` and `SnapshotEnvelope`,
+  validated with `ScenarioSchema` in both schemas. Schema version stays 1; no migration. See the
+  changelog entry for the engine follow-up.

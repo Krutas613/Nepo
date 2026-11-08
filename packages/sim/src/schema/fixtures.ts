@@ -1,16 +1,7 @@
 /** Shared scenario fixtures for tests (ARCHITECTURE.md sections 13, 15). Deep-frozen. */
+import { deepFreeze } from './freeze.js';
 import { money } from './money.js';
 import type { Scenario } from './scenario.js';
-
-function deepFreeze<T>(value: T): T {
-  if (typeof value === 'object' && value !== null) {
-    for (const key of Object.keys(value)) {
-      deepFreeze((value as Record<string, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
 
 /** No companies. */
 export const EMPTY_SCENARIO: Scenario = deepFreeze({

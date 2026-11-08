@@ -6,6 +6,7 @@
  * Liability/equity/revenue accounts therefore carry negative balances; Σ balance per entity === 0.
  */
 import { z } from 'zod';
+import { deepFreeze } from './freeze.js';
 import {
   AccountCodeSchema,
   CompanyIdSchema,
@@ -115,6 +116,16 @@ export interface AccountingState {
   /** All entities, in posting order. */
   journal: JournalEntry[];
 }
+
+/**
+ * Empty accounting slice: the value the engine installs at `state.accounting` when the accounting
+ * system is not registered (ARCHITECTURE.md section 2), so no module hand-writes a slice shape.
+ * Deep-frozen: install a copy (e.g. `structuredClone`), never this object itself.
+ *
+ * Convention: every typed slice gets an `EMPTY_<SLICE>` constant like this one, declared next to
+ * its slice type and validated against its slice schema in schema's tests.
+ */
+export const EMPTY_ACCOUNTING_STATE: AccountingState = deepFreeze({ entities: {}, journal: [] });
 
 // ---------------------------------------------------------------------------------------------
 // zod validators

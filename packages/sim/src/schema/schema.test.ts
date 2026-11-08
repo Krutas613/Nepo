@@ -1,10 +1,13 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
+  AccountingStateSchema,
   CommandInputSchema,
   CommandSchema,
   CompanyIdSchema,
+  EMPTY_ACCOUNTING_STATE,
   EMPTY_SCENARIO,
+  JsonValueSchema,
   EventSchema,
   FacilitySchema,
   ID_PREFIX,
@@ -20,6 +23,7 @@ import {
   SnapshotError,
   SnapshotSchema,
   StoreSchema,
+  WorldStateSchema,
   SYSTEM_ORDER,
   SystemIdSchema,
   ScenarioSchema,
@@ -363,6 +367,7 @@ function minimalSnapshot(): Snapshot {
     schemaVersion: SCHEMA_VERSION,
     engineVersion: '0.0.0-test',
     hash: '0123456789abcdef',
+    scenario: SMOKE_SCENARIO,
     state: minimalState(),
   };
 }
@@ -457,14 +462,96 @@ describe('snapshot', () => {
     ['pending seq beyond commandSeq', ['state', 'pendingCommands', 0, 'seq'], 3],
     ['wrong format', ['format'], 'other'],
     ['bad hash', ['hash'], 'xyz'],
+    ['invalid scenario', ['scenario', 'companies', 0, 'startingCash'], -1],
+    ['scenario with extra key', ['scenario', 'extra'], true],
+    ['non-SystemId top-level key', ['state', 'bogus'], {}],
+    ['core as an untyped slice (its typed slice is companies)', ['state', 'core'], {}],
+    ['malformed typed slice', ['state', 'accounting'], { entities: {} }],
+    ['typed slice with an extra key', ['state', 'accounting', 'extra'], []],
+    ['NaN inside an untyped slice', ['state', 'retail'], { price: NaN }],
+    ['-0 inside an untyped slice', ['state', 'economy'], [1, -0]],
+    ['undefined inside an untyped slice', ['state', 'finance'], { x: undefined }],
+    ['Map as an untyped slice', ['state', 'hr'], new Map()],
+    ['Set inside an untyped slice', ['state', 'ai'], { ids: new Set([1]) }],
+    [
+      'class instance as an untyped slice',
+      ['state', 'manufacturing'],
+      new (class Box {
+        x = 1;
+      })(),
+    ],
   ])('rejects %s', (_label, path, value) => {
     expect(SnapshotSchema.safeParse(mutated(path, value)).success).toBe(false);
+  });
+
+  it('requires scenario in both the snapshot and the envelope', () => {
+    const { scenario: _scenario, ...rest } = minimalSnapshot();
+    const raw: unknown = JSON.parse(JSON.stringify(rest));
+    expect(SnapshotSchema.safeParse(raw).success).toBe(false);
+    expect(SnapshotEnvelopeSchema.safeParse(raw).success).toBe(false);
+    expect(SnapshotEnvelopeSchema.safeParse(mutated(['scenario'], null)).success).toBe(false);
   });
 
   it('envelope schema passes state through unvalidated', () => {
     const raw = mutated(['state'], { legacy: true });
     expect(SnapshotSchema.safeParse(raw).success).toBe(false);
     expect(SnapshotEnvelopeSchema.safeParse(raw).success).toBe(true);
+  });
+});
+
+describe('world state: untyped slices', () => {
+  const untypedIds = SYSTEM_ORDER.filter((id) => id !== 'core' && id !== 'accounting');
+
+  it('accepts `retail: {}` and returns it unchanged', () => {
+    const raw = { ...minimalState(), retail: {} };
+    expect(WorldStateSchema.parse(raw)).toEqual(raw);
+  });
+
+  it('accepts arbitrary plain JSON under every untyped SystemId', () => {
+    const value = { a: [1, 'two', null, true, { nested: -3.5 }], b: {} };
+    for (const id of untypedIds) {
+      expect(WorldStateSchema.safeParse({ ...minimalState(), [id]: value }).success).toBe(true);
+    }
+    const all = Object.fromEntries(untypedIds.map((id) => [id, 0]));
+    expect(WorldStateSchema.safeParse({ ...minimalState(), ...all }).success).toBe(true);
+  });
+
+  it('rejects `bogus: {}` (not a SystemId)', () => {
+    expect(WorldStateSchema.safeParse({ ...minimalState(), bogus: {} }).success).toBe(false);
+  });
+
+  it('still rejects a badly shaped typed slice', () => {
+    const state = minimalState();
+    expect(
+      WorldStateSchema.safeParse({ ...state, accounting: { ...state.accounting, journal: {} } })
+        .success,
+    ).toBe(false);
+    expect(WorldStateSchema.safeParse({ ...state, accounting: {} }).success).toBe(false);
+  });
+
+  it('property: JsonValueSchema accepts every value that survives a JSON round trip', () => {
+    fc.assert(
+      fc.property(fc.jsonValue(), (v) => {
+        // The round trip turns -0 into 0, which state forbids anyway.
+        const value: unknown = JSON.parse(JSON.stringify(v));
+        expect(JsonValueSchema.safeParse(value).success).toBe(true);
+      }),
+    );
+  });
+});
+
+describe('empty slices', () => {
+  it('EMPTY_ACCOUNTING_STATE validates, is empty and deep-frozen', () => {
+    expect(AccountingStateSchema.parse(EMPTY_ACCOUNTING_STATE)).toEqual({
+      entities: {},
+      journal: [],
+    });
+    expect(Object.isFrozen(EMPTY_ACCOUNTING_STATE)).toBe(true);
+    expect(Object.isFrozen(EMPTY_ACCOUNTING_STATE.entities)).toBe(true);
+    expect(Object.isFrozen(EMPTY_ACCOUNTING_STATE.journal)).toBe(true);
+    expect(
+      WorldStateSchema.safeParse({ ...minimalState(), accounting: EMPTY_ACCOUNTING_STATE }).success,
+    ).toBe(true);
   });
 });
 
