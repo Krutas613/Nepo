@@ -229,7 +229,7 @@ describe('migration hook', () => {
     expect(snapshotCode(() => migrateSnapshot({}, 4, 3, {}))).toBe('too_new');
   });
 
-  it('the default table is empty at schema v1', () => {
+  it('the default table runs nothing for a current-version state', () => {
     expect(migrateSnapshot({ x: 1 }, SCHEMA_VERSION)).toEqual({ state: { x: 1 }, steps: 0 });
   });
 });

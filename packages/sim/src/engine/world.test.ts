@@ -150,10 +150,17 @@ describe('createWorld', () => {
     );
     // `Company` has no homeCity field (schema/company.ts): it is scenario data, read by domain
     // systems through ctx.scenario, as is the content pack.
-    for (const c of companies) expect(Object.keys(c).sort()).toEqual(
-      ['controller', 'foundedTick', 'id', 'name', 'parentId'],
+    for (const c of companies)
+      expect(Object.keys(c).sort()).toEqual([
+        'controller',
+        'foundedTick',
+        'id',
+        'name',
+        'parentId',
+      ]);
+    expect(world.scenario.companies[0]?.homeCity).toBe(
+      VERTICAL_SLICE_SCENARIO.companies[0]?.homeCity,
     );
-    expect(world.scenario.companies[0]?.homeCity).toBe(VERTICAL_SLICE_SCENARIO.companies[0]?.homeCity);
     expect(world.scenario.content).toEqual(VERTICAL_SLICE_SCENARIO.content);
     expect(WorldStateSchema.safeParse(world.state).success).toBe(true);
   });
