@@ -3,7 +3,7 @@
  *
  * Public surface: tick loop (`createWorld`, `step`, `submit`), snapshots (`snapshot`, `restore`,
  * `migrateSnapshot`), determinism utilities (`hashState`, `hashString`, `canonicalJson`,
- * `findNonFinite`, `sortedKeys`), calendar, RNG, registry, and the System types.
+ * `findNonFinite`, `hasNonFinite`, `sortedKeys`), calendar, RNG, registry, and the System types.
  */
 export {
   calendarFromTick,
@@ -16,8 +16,8 @@ export {
 } from './calendar.js';
 export { canonicalJson } from './canonical.js';
 export { coreSystem, type CompaniesSlice } from './core.js';
-export { findNonFinite } from './finite.js';
-export { hashState, hashString, hashValue } from './hash.js';
+export { findNonFinite, hasNonFinite, type FindNonFiniteOptions } from './finite.js';
+export { hashState, hashString, hashValue, type HashOptions, type HashReport } from './hash.js';
 export {
   migrateSnapshot,
   MIGRATIONS,
