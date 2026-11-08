@@ -14,3 +14,4 @@ export * from './schema/index.js';
 export * from './engine/index.js';
 export * as accounting from './accounting/index.js';
 export * as economy from './economy/index.js';
+export * as manufacturing from './manufacturing/index.js';
