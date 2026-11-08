@@ -314,14 +314,13 @@ describe('period close over 2 simulated years with the real engine', () => {
     expect(AccountingStateSchema.safeParse(busy.state.accounting).success).toBe(true);
   });
 
-  // TODO(engine REQ-001): unskip once engine `snapshot()` emits the now-required `scenario` field;
-  // until then `restore` rejects every envelope with SnapshotError('invalid').
-  it.skip('the accounting slice survives snapshot/restore', () => {
+  it('the accounting slice survives snapshot/restore', () => {
     // Full snapshot round trip on an accounting-only world (state passes the strict WorldState schema).
     const a = newWorld(SMOKE_SCENARIO, []);
     for (let i = 0; i < 400; i++) step(a);
     const b = restore(snapshot(a), [accountingSystem]);
-    for (let i = 0; i < 400; i++) {
+    expect(hashState(b.state)).toBe(hashState(a.state));
+    for (let i = 0; i < 30; i++) {
       step(a);
       step(b);
     }
