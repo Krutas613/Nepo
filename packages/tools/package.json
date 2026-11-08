@@ -5,7 +5,7 @@
   "description": "Content pipeline, data validation, scenario tooling for Nepo.",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "validate-data": "tsx src/validate-data.ts"

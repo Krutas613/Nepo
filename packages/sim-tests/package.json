@@ -5,7 +5,7 @@
   "description": "Headless sweeps, invariants, property tests, regression snapshots for the Nepo sim.",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "sweep": "tsx src/cli.ts"
