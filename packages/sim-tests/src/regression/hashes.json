@@ -1,0 +1,12 @@
+{
+  "description": "Final state hash per seed, SMOKE_SCENARIO, [accountingSystem], 5 years (1800 ticks). Change only deliberately; see README.",
+  "scenario": "smoke",
+  "years": 5,
+  "hashes": {
+    "1": "81fbd3e5ba770cf4",
+    "2": "87b930e6a6199277",
+    "3": "7ba884c70153bcd6",
+    "4": "2313e400c7ce1191",
+    "5": "c12c59a1a0177430"
+  }
+}
