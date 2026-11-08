@@ -2,16 +2,8 @@
  * Integration with the real engine, accounting, economy and manufacturing (retail.md sections 4-6, 10).
  */
 import { describe, expect, it } from 'vitest';
-import { ACCOUNTS, allocateMoney, checkLedgerInvariants } from '../accounting/index.js';
-import {
-  createWorld,
-  hashState,
-  restore,
-  snapshot,
-  step,
-  type System,
-  type World,
-} from '../engine/index.js';
+import { ACCOUNTS, allocateMoney } from '../accounting/index.js';
+import { createWorld, type System, type World } from '../engine/index.js';
 import { newFacility } from '../manufacturing/index.js';
 import {
   M1_CONTENT_PACK,
@@ -21,7 +13,6 @@ import {
   quantity,
   type Event,
   type Facility,
-  type StoreFormat,
 } from '../schema/index.js';
 import { checkRetailInvariants } from './invariants.js';
 import { RETAIL_SERVICE, type RetailApi } from './service.js';
@@ -72,7 +63,7 @@ describe('store.build', () => {
       payload: { companyId: OWNER, storeFormatId: GROCERY, cityId: SPRINGFIELD },
     });
     const events = run(world, 1);
-    const format = M1_CONTENT_PACK.storeFormats[GROCERY] as StoreFormat;
+    const format = M1_CONTENT_PACK.storeFormats[GROCERY]!;
     const store = world.state.retail.stores[STORE_1];
     expect(store?.status).toBe('under_construction');
     expect(store?.completesTick).toBe(format.constructionTicks);
@@ -95,12 +86,13 @@ describe('store.build', () => {
   it('rejects with the documented codes and posts nothing', () => {
     const world = newWorld(scenarioOf({ cash: 1_000, rival: true }));
     const journal0 = world.state.accounting.journal.length;
-    const build = (issuer: typeof OWNER, companyId: typeof OWNER, format: string, city: string) =>
+    const build = (issuer: typeof OWNER, companyId: typeof OWNER, format: string, city: string) => {
       send(world, {
         type: 'store.build',
         issuer,
         payload: { companyId, storeFormatId: format as never, cityId: city as never },
       });
+    };
     build(OWNER, OTHER, 'grocery', 'springfield');
     build(OWNER, OWNER, 'nope', 'springfield');
     build(OWNER, OWNER, 'grocery', 'nowhere');
@@ -172,24 +164,25 @@ describe('store.set_price and store.set_restock_policy', () => {
 
   it('rejects with every documented code', () => {
     const world = worldWithStore();
-    const cap = (M1_CONTENT_PACK.storeFormats[GROCERY] as StoreFormat).shelfCapacity;
+    const cap = M1_CONTENT_PACK.storeFormats[GROCERY]!.shelfCapacity;
     const price = (
       issuer: typeof OWNER,
       storeId: string,
       productId: typeof BREAD,
       p: number | null,
-    ) =>
+    ) => {
       send(world, {
         type: 'store.set_price',
         issuer,
         payload: { storeId: storeId as never, productId, price: p === null ? null : money(p) },
       });
+    };
     const policy = (
       issuer: typeof OWNER,
       productId: typeof BREAD,
       src: string | null,
       target: number,
-    ) =>
+    ) => {
       send(world, {
         type: 'store.set_restock_policy',
         issuer,
@@ -200,6 +193,7 @@ describe('store.set_price and store.set_restock_policy', () => {
           targetStock: quantity(target),
         },
       });
+    };
     price(OWNER, 'st_999999', BREAD, 1);
     price(OTHER, STORE_1, BREAD, 1);
     price(OWNER, STORE_1, 'nope' as never, 1);
@@ -246,7 +240,7 @@ describe('sales against the real economy', () => {
     expect(sold?.payload.revenue).toBe(400 * (sold?.payload.price ?? 0));
     expect(sold?.payload.cogs).toBe(allocateMoney(money(100_000), [400, 600])[0]);
     // Debit-normal signed balances: income accounts are negative.
-    expect(balance(world, ACCOUNTS.SALES)).toBe(-(sold?.payload.revenue ?? 0));
+    expect(balance(world, ACCOUNTS.SALES)).toBe(-Number(sold?.payload.revenue ?? 0));
     expect(balance(world, ACCOUNTS.COGS)).toBe(sold?.payload.cogs);
     expect(of(events, 'store.sold')).toHaveLength(1);
     const sales = world.state.accounting.journal.filter((j) => j.memo === 'Retail sale');
@@ -261,7 +255,7 @@ describe('sales against the real economy', () => {
 
   it('a price at 1 + 1/epsilon of reference sells nothing; a cheaper price sells more', () => {
     const atRef = soldAt(null).sold?.payload.quantity ?? 0;
-    const cheap = soldAt(200, 2000 > 1000 ? 1000 : 1000).sold?.payload.quantity ?? 0;
+    const cheap = soldAt(200).sold?.payload.quantity ?? 0;
     expect(cheap).toBeGreaterThan(atRef);
     const dear = soldAt(417);
     expect(dear.sold).toBeUndefined();
@@ -289,13 +283,13 @@ describe('sales against the real economy', () => {
   it('posts the daily operating cost and, at month end, depreciation to the exact cost', () => {
     const world = newWorld();
     seedStore(world, { stock: 0, value: 0 });
-    const format = M1_CONTENT_PACK.storeFormats[GROCERY] as StoreFormat;
+    const format = M1_CONTENT_PACK.storeFormats[GROCERY]!;
     run(world, 30);
     expect(balance(world, ACCOUNTS.OPEX_FACILITY)).toBe(format.dailyOperatingCost * 30);
     const store = world.state.retail.stores[STORE_1];
     expect(store?.accumulatedDepreciation).toBeGreaterThan(0);
     expect(balance(world, ACCOUNTS.ACCUM_DEPRECIATION)).toBe(
-      -(store?.accumulatedDepreciation ?? 0),
+      -Number(store?.accumulatedDepreciation ?? 0),
     );
   });
 
@@ -306,12 +300,12 @@ describe('sales against the real economy', () => {
         ...M1_CONTENT_PACK,
         storeFormats: {
           [GROCERY]: {
-            ...(M1_CONTENT_PACK.storeFormats[GROCERY] as StoreFormat),
+            ...M1_CONTENT_PACK.storeFormats[GROCERY]!,
             shrinkagePerMille: 10,
           },
         },
       },
-    } as never);
+    });
     seedStore(world, { stock: 1000, value: 250_000, price: 100_000 });
     run(world, 1);
     const line = world.state.retail.stores[STORE_1]?.shelves[BREAD];

@@ -46,7 +46,7 @@ export function scenarioOf(opts: { cash?: number; rival?: boolean } = {}): Scena
     opts.rival === true
       ? [player, { ...player, name: 'Rival Co', controller: 'ai' as const }]
       : [player];
-  return { ...VERTICAL_SLICE_SCENARIO, companies } as Scenario;
+  return { ...VERTICAL_SLICE_SCENARIO, companies };
 }
 
 export function newWorld(scenario: Scenario = scenarioOf(), seed = 1): World {
@@ -110,7 +110,7 @@ export function seedStore(
   const line = store.shelves[BREAD];
   if (line === undefined) throw new Error('makeStore has no bread line');
   line.price = opts.price === undefined || opts.price === null ? null : money(opts.price);
-  delete store.shelves[BREAD];
+  Reflect.deleteProperty(store.shelves, BREAD);
   store.shelves[product] = line;
   world.state.retail.stores[id] = store;
   if (value > 0) {

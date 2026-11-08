@@ -13,7 +13,6 @@ import {
   quantity,
   recipeId,
   type Event,
-  type StoreFormat,
 } from '../schema/index.js';
 import { checkRetailInvariants, ppeOfStores } from './invariants.js';
 import { shelfValue } from './store.js';
@@ -83,7 +82,7 @@ describe('vertical slice: factory + store, 120 ticks', () => {
   const sold = events.filter((e) => e.type === 'store.sold');
   const restocked = events.filter((e) => e.type === 'store.restocked');
   const store = world.state.retail.stores[STORE_1];
-  const format = M1_CONTENT_PACK.storeFormats[GROCERY] as StoreFormat;
+  const format = M1_CONTENT_PACK.storeFormats[GROCERY]!;
 
   it('rejects nothing and opens the store after its construction', () => {
     expect(events.filter((e) => e.type === 'command.rejected')).toEqual([]);
@@ -95,13 +94,12 @@ describe('vertical slice: factory + store, 120 ticks', () => {
   it('sells, with revenue and COGS posted through accounting', () => {
     expect(sold.length).toBeGreaterThan(20);
     expect(restocked.length).toBeGreaterThan(20);
-    const revenue = sum(sold, (e) => (e.type === 'store.sold' ? e.payload.revenue : 0));
-    const cogs = sum(sold, (e) => (e.type === 'store.sold' ? e.payload.cogs : 0));
+    const revenue = sum(sold, (e) => e.payload.revenue);
+    const cogs = sum(sold, (e) => e.payload.cogs);
     expect(revenue).toBeGreaterThan(0);
     expect(balance(world, ACCOUNTS.SALES)).toBe(-revenue);
     expect(balance(world, ACCOUNTS.COGS)).toBe(cogs);
     for (const e of sold) {
-      if (e.type !== 'store.sold') continue;
       expect(e.payload.revenue).toBe(e.payload.price * e.payload.quantity);
       expect(e.payload.price).toBe(e.payload.referencePrice); // price: null follows the market
     }
@@ -109,10 +107,10 @@ describe('vertical slice: factory + store, 120 ticks', () => {
 
   it('keeps goods and value conserved from factory to till', () => {
     const line = store?.shelves[BREAD];
-    const transferred = sum(restocked, (e) => (e.type === 'store.restocked' ? e.payload.cost : 0));
-    const units = sum(restocked, (e) => (e.type === 'store.restocked' ? e.payload.quantity : 0));
-    const unitsSold = sum(sold, (e) => (e.type === 'store.sold' ? e.payload.quantity : 0));
-    const cogs = sum(sold, (e) => (e.type === 'store.sold' ? e.payload.cogs : 0));
+    const transferred = sum(restocked, (e) => e.payload.cost);
+    const units = sum(restocked, (e) => e.payload.quantity);
+    const unitsSold = sum(sold, (e) => e.payload.quantity);
+    const cogs = sum(sold, (e) => e.payload.cogs);
     expect(line?.lot.received).toBe(units);
     expect(line?.lot.issued).toBe(unitsSold);
     expect(units - unitsSold).toBe(line?.lot.quantity);

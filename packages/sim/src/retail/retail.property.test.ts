@@ -133,7 +133,7 @@ describe('sales against the real economy: property', () => {
           }
           expect(sold).toBeLessThanOrEqual(stock);
           expect(line?.lot.quantity).toBe(stock - sold);
-          expect(balance(world, ACCOUNTS.SALES)).toBe(-revenue);
+          expect(balance(world, ACCOUNTS.SALES)).toBe(0 - revenue);
         },
       ),
       { numRuns: 40 },
@@ -150,11 +150,7 @@ describe('competition: stores in one market share one clearing', () => {
     seedStore(world, { stock: 1000, value: 100_000, price: 300, id: second });
     const sold = run(world, 1).filter((e) => e.type === 'store.sold');
     const qty = (id: StoreId) =>
-      sold.reduce(
-        (a, e) =>
-          e.type === 'store.sold' && e.payload.storeId === id ? a + e.payload.quantity : a,
-        0,
-      );
+      sold.reduce((a, e) => (e.payload.storeId === id ? a + e.payload.quantity : a), 0);
     const cheap = qty(STORE_1);
     const dear = qty(second);
     expect(cheap).toBeGreaterThan(dear);

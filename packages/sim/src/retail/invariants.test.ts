@@ -29,7 +29,7 @@ describe('checkRetailInvariants', () => {
   it('flags a ledger balance without stores', () => {
     const w = newWorld();
     seedStore(w, { stock: 10, value: 100 });
-    delete w.state.retail.stores[STORE_1];
+    Reflect.deleteProperty(w.state.retail.stores, STORE_1);
     expect(codes(w)).toEqual(['shelf.value_mismatch']);
   });
 
