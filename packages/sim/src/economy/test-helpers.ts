@@ -36,13 +36,21 @@ export const GRAIN: ProductId = productId('grain');
 export const MARKET = marketId('springfield_market');
 export const STORE = storeId('st_000001');
 
+function must<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new Error(`M1_CONTENT_PACK lacks ${what}`);
+  return value;
+}
+
 /** `M1_CONTENT_PACK` numbers the tests rely on. */
 export const PRICING = M1_CONTENT_PACK.economy.pricing;
-export const BREAD_BASE_PRICE: Money = M1_CONTENT_PACK.products[BREAD]!.basePrice;
-export const BREAD_ELASTICITY: number = M1_CONTENT_PACK.products[BREAD]!.elasticity;
-export const BREAD_DEMAND: Quantity = M1_CONTENT_PACK.markets[MARKET]!.demand[0]!.baseDailyDemand;
-export const GRAIN_BASE_PRICE: Money = M1_CONTENT_PACK.products[GRAIN]!.basePrice;
-export const GRAIN_SOURCE = M1_CONTENT_PACK.economy.commodities[GRAIN]!;
+export const BREAD_BASE_PRICE: Money = must(M1_CONTENT_PACK.products[BREAD], 'bread').basePrice;
+export const BREAD_ELASTICITY: number = must(M1_CONTENT_PACK.products[BREAD], 'bread').elasticity;
+export const BREAD_DEMAND: Quantity = must(
+  must(M1_CONTENT_PACK.markets[MARKET], 'market').demand[0],
+  'bread demand',
+).baseDailyDemand;
+export const GRAIN_BASE_PRICE: Money = must(M1_CONTENT_PACK.products[GRAIN], 'grain').basePrice;
+export const GRAIN_SOURCE = must(M1_CONTENT_PACK.economy.commodities[GRAIN], 'grain source');
 
 export const SCENARIO: Scenario = VERTICAL_SLICE_SCENARIO;
 
@@ -94,11 +102,15 @@ export function scriptedRetail(
   };
 }
 
+export interface PurchaseLog {
+  purchases: { tick: number; unitPrice: Money; total: Money }[];
+}
+
 /** Manufacturing stand-in: buys `buy(tick)` units of grain in `production` (0 = none). */
 export function scriptedManufacturing(
   buy: (tick: number) => number,
-  log: { purchases: { tick: number; unitPrice: Money; total: Money }[] } = { purchases: [] },
-): System<ManufacturingState> & { log: typeof log } {
+  log: PurchaseLog = { purchases: [] },
+): System<ManufacturingState> & { log: PurchaseLog } {
   return {
     id: 'manufacturing',
     handles: [],

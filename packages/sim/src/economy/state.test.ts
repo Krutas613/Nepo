@@ -32,6 +32,7 @@ import {
   BREAD,
   BREAD_BASE_PRICE,
   BREAD_DEMAND,
+  BREAD_ELASTICITY,
   GRAIN,
   GRAIN_BASE_PRICE,
   GRAIN_SOURCE,
@@ -161,6 +162,13 @@ describe('applyMacro', () => {
 });
 
 describe('advanceDay', () => {
+  it('at tick 0 leaves the day that init opened untouched (there is no day -1 to close)', () => {
+    const state = createEconomyState(M1_CONTENT_PACK, env());
+    const before = JSON.stringify(state);
+    advanceDay(state, M1_CONTENT_PACK, calendarFromTick(0, 2000), env(0));
+    expect(JSON.stringify(state)).toBe(before);
+  });
+
   it('relaxes from yesterday’s tallies, closes the day into last*, and reopens baseline demand', () => {
     const state = createEconomyState(M1_CONTENT_PACK, env());
     // Yesterday: nobody offered anything -> x = +1.

@@ -285,7 +285,12 @@ export function advanceCommodity(
   cs.purchasedToday = quantity(0);
 }
 
-/** The whole `macro` phase for one tick. */
+/**
+ * The whole `macro` phase for one tick. Day 0 is opened by `init` (level 1, reference = anchor,
+ * baseline demand); there is no day -1 to close, so at tick 0 only the macro step runs and the
+ * markets are left as init opened them. From tick 1 on, each tick closes the previous day and prices
+ * today from its tallies.
+ */
 export function advanceDay(
   state: EconomyState,
   content: ReadonlyContent,
@@ -293,6 +298,7 @@ export function advanceDay(
   env: EconomyEnv,
 ): void {
   applyMacro(state, content, date, env);
+  if (env.tick === 0) return;
   const pricing = content.economy.pricing;
   for (const marketId of sortedKeys(state.markets)) {
     const market = state.markets[marketId];
