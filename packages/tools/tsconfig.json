@@ -3,12 +3,11 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/**/*.ts"],
-  "references": [
-    {
-      "path": "../sim"
-    }
+  "include": [
+    "src/**/*.ts"
   ]
 }

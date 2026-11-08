@@ -11,19 +11,19 @@ integers. Balance is tuned later by game-design.
 
 ## Files
 
-| File                          | `ContentFiles` key | Shape                 | Contents (M1)                          |
-| ----------------------------- | ------------------ | --------------------- | -------------------------------------- |
-| `products.json`               | `products`         | `Product[]`           | `wheat` (raw), `bread` (consumer)      |
-| `recipes.json`                | `recipes`          | `Recipe[]`            | `bread_batch`                          |
-| `facility_types.json`         | `facilityTypes`    | `FacilityType[]`      | `bread_plant`                          |
-| `store_formats.json`          | `storeFormats`     | `StoreFormat[]`       | `corner_store`                         |
-| `regions.json`                | `regions`          | `Region[]`            | `coastal_plains`                       |
-| `cities.json`                 | `cities`           | `City[]`              | `harbour_bay` (population 40,000)      |
-| `markets.json`                | `markets`          | `Market[]`            | one market for `harbour_bay`           |
-| `economy/pricing.json`        | `pricing`          | `PricingTunables`     | alpha 0.05, beta 0.25, kappa 0.3, maxCapture 1.5 |
-| `economy/macro.json`          | `macro`            | `MacroTunables`       | inflation 0, policy rate 0.04, demand index 1 |
-| `economy/commodities.json`    | `commodities`      | `CommoditySource[]`   | `wheat`: 400 kg/day reference volume   |
-| `finance/banks.json`          | `banks`            | `Bank[]`              | `coastal_savings`                      |
+| File                       | `ContentFiles` key | Shape               | Contents (M1)                                    |
+| -------------------------- | ------------------ | ------------------- | ------------------------------------------------ |
+| `products.json`            | `products`         | `Product[]`         | `wheat` (raw), `bread` (consumer)                |
+| `recipes.json`             | `recipes`          | `Recipe[]`          | `bread_batch`                                    |
+| `facility_types.json`      | `facilityTypes`    | `FacilityType[]`    | `bread_plant`                                    |
+| `store_formats.json`       | `storeFormats`     | `StoreFormat[]`     | `corner_store`                                   |
+| `regions.json`             | `regions`          | `Region[]`          | `coastal_plains`                                 |
+| `cities.json`              | `cities`           | `City[]`            | `harbour_bay` (population 40,000)                |
+| `markets.json`             | `markets`          | `Market[]`          | one market for `harbour_bay`                     |
+| `economy/pricing.json`     | `pricing`          | `PricingTunables`   | alpha 0.05, beta 0.25, kappa 0.3, maxCapture 1.5 |
+| `economy/macro.json`       | `macro`            | `MacroTunables`     | inflation 0, policy rate 0.04, demand index 1    |
+| `economy/commodities.json` | `commodities`      | `CommoditySource[]` | `wheat`: 400 kg/day reference volume             |
+| `finance/banks.json`       | `banks`            | `Bank[]`            | `coastal_savings`                                |
 
 File names follow the layout in `docs/design/economy.md`, `manufacturing.md`, `retail.md`,
 `finance.md` and `ARCHITECTURE.md` section 15 (`facility_types.json`, `store_formats.json`).
@@ -52,15 +52,15 @@ so **95 per loaf**.
 Plant at capacity: 200 batches/day = 800 loaves/day, consuming 400 kg/day of wheat (equal to the
 commodity `referenceDailyVolume`, so wheat stays at its base price of 40).
 
-| Item (per loaf, at 800 loaves/day)                                 | Amount |
-| ------------------------------------------------------------------ | -----: |
-| Reference price (`bread.basePrice 250 x priceFactor 1 x index 1`)  |    250 |
-| Materials + labour (95 above)                                      |     95 |
-| Plant opex: 40,000 per day / 800                                   |     50 |
-| Plant depreciation: 12,000,000 / 240 months = 50,000/month, ~1,667/day / 800 |  2 |
-| Store opex: 25,000 per day / 800                                   |     31 |
-| Store depreciation: 4,000,000 / 120 months = 33,333/month, ~1,111/day / 800 |  1 |
-| **Operating profit per loaf**                                      | **71 (28%)** |
+| Item (per loaf, at 800 loaves/day)                                           |       Amount |
+| ---------------------------------------------------------------------------- | -----------: |
+| Reference price (`bread.basePrice 250 x priceFactor 1 x index 1`)            |          250 |
+| Materials + labour (95 above)                                                |           95 |
+| Plant opex: 40,000 per day / 800                                             |           50 |
+| Plant depreciation: 12,000,000 / 240 months = 50,000/month, ~1,667/day / 800 |            2 |
+| Store opex: 25,000 per day / 800                                             |           31 |
+| Store depreciation: 4,000,000 / 120 months = 33,333/month, ~1,111/day / 800  |            1 |
+| **Operating profit per loaf**                                                | **71 (28%)** |
 
 Daily at full capacity: revenue 800 x 250 = 200,000; materials and labour 200 x 380 = 76,000;
 plant opex 40,000; store opex 25,000; depreciation ~2,778; operating profit **~56,200 per day (28%)**.

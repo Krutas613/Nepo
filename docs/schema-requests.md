@@ -77,6 +77,23 @@ Only the `schema` agent edits `packages/sim/src/schema`. Every other agent reque
   design in economy.md is implemented; if game-design prefers to hold it in `Market` instead, say so.
 - Consumers affected: content (`data/cities.json`), economy (M2 segmentation), ui (city panel).
 
+### REQ-004: v1 -> v2 migration must add the M1 chart accounts `1205` and `1230` to existing ledgers
+
+- Requested by: accounting
+- Date: 2026-11-08
+- Type: breaking (amends the REQ-002 / `schema-m1.md` section 10 migration note; no type change)
+- Proposal: `STANDARD_CHART` gains `1205 INVENTORY_WIP` and `1230 INVENTORY_MERCHANDISE` (ADR-012).
+  New ledgers get them from `openEntity`, but a ledger migrated from v1 only has its codes rekeyed, so
+  it would lack both accounts and every `productionStart`/`productionComplete`/`internalTransfer`/
+  `retailSale` posting to it would fail with `unknown_account` (and `balance(..., 1205)` would throw).
+  Add to engine `MIGRATIONS[1]`, after the rekey, for every `ledger` in `state.accounting.entities`
+  and for each code `c` of `a1205`, `a1230` not already present: set `accounts[c]` to a copy of the
+  matching `STANDARD_CHART` row with `balance: 0` (names "Inventory - Work in Progress" and
+  "Inventory - Merchandise", type `asset`), and `monthOpening[c] = 0`, `yearOpening[c] = 0`. Stored
+  reports are left unchanged
+  (a missing code in an old report's `byAccount` means 0). Idempotent. Hash-neutral for v2 worlds.
+- Consumers affected: engine (`MIGRATIONS[1]`), qa (migration test from a v1 fixture).
+
 ## Resolved
 
 ### REQ-001: carry the scenario in `Snapshot`
