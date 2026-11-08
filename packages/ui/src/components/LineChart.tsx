@@ -26,7 +26,7 @@ export function niceTicks(min: number, max: number, target = 4): number[] {
   return ticks;
 }
 
-const M = { top: 8, right: 12, bottom: 22, left: 64 };
+const M = { top: 8, right: 12, bottom: 22, left: 76 };
 
 /** Minimal dependency-free SVG line chart: one series, grid, end labels. Theme via CSS vars. */
 export function LineChart({
@@ -54,13 +54,18 @@ export function LineChart({
       if (p.y < minY) minY = p.y;
       if (p.y > maxY) maxY = p.y;
     }
-    if (maxY === minY) {
-      maxY += 1;
-      minY -= 1;
+    const flat = maxY === minY;
+    const flatValue = minY;
+    if (flat) {
+      // A constant series: centre it in a window of +-5% and label just its value.
+      const half = Math.max(1, Math.abs(minY) * 0.05);
+      maxY += half;
+      minY -= half;
+    } else {
+      const pad = (maxY - minY) * 0.06;
+      minY -= pad;
+      maxY += pad;
     }
-    const pad = (maxY - minY) * 0.06;
-    minY -= pad;
-    maxY += pad;
     const sx = (x: number): number => M.left + ((x - minX) / Math.max(1, maxX - minX)) * innerW;
     const sy = (y: number): number => M.top + (1 - (y - minY) / (maxY - minY)) * innerH;
     // Decimate to about 2 points per pixel column; the buffer can hold thousands.
@@ -77,7 +82,7 @@ export function LineChart({
     }
     body = (
       <>
-        {niceTicks(minY, maxY).map((t) => (
+        {(flat ? [flatValue] : niceTicks(minY, maxY)).map((t) => (
           <g key={t}>
             <line className="chart-grid" x1={M.left} x2={w - M.right} y1={sy(t)} y2={sy(t)} />
             <text

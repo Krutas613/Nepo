@@ -16,6 +16,7 @@ import {
   type SystemId,
   type TypedDomainSliceId,
 } from '../schema/index.js';
+import { ACCOUNTING_SERVICE, accountingSystem } from '../accounting/index.js';
 import { hashState } from './hash.js';
 import {
   createServiceKey,
@@ -298,6 +299,7 @@ describe('createWorld', () => {
   });
 });
 
+__TEST__
 describe('step: phases', () => {
   it('runs phases 1..8 in PHASE_ORDER, systems in SYSTEM_ORDER, every tick', () => {
     const calls: [number, Phase, SystemId][] = [];

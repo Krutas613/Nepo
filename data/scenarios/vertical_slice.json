@@ -1,0 +1,13 @@
+{
+  "id": "vertical_slice",
+  "name": "Harbour Bay: First Bakery",
+  "epochYear": 2000,
+  "companies": [
+    {
+      "name": "Harbour Loaf Company",
+      "controller": "player",
+      "startingCash": 18000000,
+      "homeCity": "harbour_bay"
+    }
+  ]
+}

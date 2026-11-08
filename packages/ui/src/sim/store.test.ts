@@ -47,7 +47,9 @@ describe('newGame + stepping', () => {
     const store = makeStore(3);
     store.stepMany(45);
     const hashA = store.stateHash();
+    const firstGame = store.getView().gameId;
     store.newGame(3);
+    expect(store.getView().gameId).toBe(firstGame + 1);
     expect(store.getView().tick).toBe(0);
     store.stepMany(45);
     expect(store.stateHash()).toBe(hashA);

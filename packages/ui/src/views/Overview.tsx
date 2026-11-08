@@ -23,6 +23,7 @@ export function Overview(): ReactElement {
   const series = useSelector((v) => v.cashSeries);
   const epoch = useSelector((v) => v.world.state.epochYear);
   const seed = useSelector((v) => v.seed);
+  const gameId = useSelector((v) => v.gameId);
   const tick = useSelector((v) => v.tick);
   const points = useMemo(() => series.map((p) => ({ x: p.tick, y: p.value })), [series]);
 
@@ -81,7 +82,7 @@ export function Overview(): ReactElement {
 
       <div className="grid-2">
         <Panel title="Company">
-          <RenameCompanyForm />
+          <RenameCompanyForm key={gameId} />
         </Panel>
         <Panel title="Run">
           <dl className="kv">

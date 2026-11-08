@@ -44,7 +44,7 @@ export function Events(): ReactElement {
       {
         key: 'date',
         header: 'Date',
-        width: '120px',
+        width: '150px',
         render: (e) => <span className="num">{formatDate(calendarFromTick(e.tick, epoch))}</span>,
       },
       {

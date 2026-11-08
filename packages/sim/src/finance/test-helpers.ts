@@ -48,7 +48,9 @@ export const RIVAL: CompanyId = companyId('co_000002');
 
 /** The single M1 bank (`first_national`). */
 export const BANK: Bank = (() => {
-  const bank = M1_CONTENT_PACK.finance.banks[sortedKeys(M1_CONTENT_PACK.finance.banks)[0] ?? ''];
+  const banks = M1_CONTENT_PACK.finance.banks;
+  const [id] = sortedKeys(banks);
+  const bank = id === undefined ? undefined : banks[id];
   if (bank === undefined) throw new Error('M1_CONTENT_PACK has no bank');
   return bank;
 })();

@@ -72,7 +72,7 @@ export function Ledger(): ReactElement {
       {
         key: 'date',
         header: 'Date',
-        width: '120px',
+        width: '150px',
         render: (e) => <span className="num">{formatDate(calendarFromTick(e.tick, epoch))}</span>,
       },
       { key: 'source', header: 'Source', width: '110px', render: (e) => e.source },
@@ -105,7 +105,7 @@ export function Ledger(): ReactElement {
       <Panel
         fill
         flush
-        title={`Journal (${String(rows.length)} of ${String(count)} entries)`}
+        title={`Journal (${String(rows.length)} ${rows.length === 1 ? 'entry' : 'entries'})`}
         actions={
           <div className="toolbar">
             <label className="toolbar-label" htmlFor="ledger-account">

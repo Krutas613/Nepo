@@ -285,7 +285,17 @@ function makeServiceRegistry(internals: WorldInternals): ServiceRegistry {
   };
 }
 
-function createServiceFor(world: World, internals: WorldInternals, system: AnySystem): void {
+/**
+ * `services` is the world's live registry view (backed by `internals.services`): at creation time it
+ * holds only earlier systems' services, but lookups done lazily inside a service method see every
+ * registered service.
+ */
+function createServiceFor(
+  world: World,
+  internals: WorldInternals,
+  system: AnySystem,
+  services: ServiceRegistry,
+): void {
   if (system.createService === undefined || system.serviceKey === undefined) return;
   const key = system.serviceKey;
   if (internals.services.has(key)) {
@@ -309,6 +319,7 @@ function createServiceFor(world: World, internals: WorldInternals, system: AnySy
     emit: (event) => {
       emitEvent(internals, system.id, event);
     },
+    services,
   };
   internals.services.set(key, system.createService(handle));
 }
@@ -384,7 +395,7 @@ export function buildWorld(
         services,
       };
       stateRecord(state)[sliceKeyOf(system.id)] = system.init(ctx);
-      createServiceFor(world, internals, system);
+      createServiceFor(world, internals, system, services);
     }
     internals.events = null;
     world.lastEvents = initEvents;
@@ -395,7 +406,7 @@ export function buildWorld(
           system: system.id,
         });
       }
-      createServiceFor(world, internals, system);
+      createServiceFor(world, internals, system, services);
     }
   }
   return world;

@@ -57,6 +57,8 @@ export interface GameView {
   readonly world: World;
   /** Increments on every commit. */
   readonly version: number;
+  /** Increments whenever a different world replaces the current one (new game, load). */
+  readonly gameId: number;
   readonly tick: number;
   readonly seed: number;
   /** Newest last; capped at `EVENT_BUFFER_CAP`. Includes the init events. */
@@ -106,6 +108,7 @@ export class GameStore {
   private lastGood: string | null = null;
   private lastGoodTick = -Infinity;
   private version = 0;
+  private gameId = 0;
   private view: GameView;
   private eventsDirty = true;
   private eventsCopy: readonly Event[] = [];
@@ -200,6 +203,7 @@ export class GameStore {
   newGame(seed: number): void {
     this.clock.pause();
     this.world = createWorld({ seed, scenario: DEFAULT_SCENARIO, systems: this.systems });
+    this.gameId += 1;
     this.poisoned = null;
     this.resetBuffers();
     this.commit();
@@ -230,6 +234,7 @@ export class GameStore {
     }
     this.clock.pause();
     this.world = next;
+    this.gameId += 1;
     this.poisoned = null;
     this.resetBuffers();
     this.commit();
@@ -341,6 +346,7 @@ export class GameStore {
     return {
       world: this.world,
       version: this.version,
+      gameId: this.gameId,
       tick: state.tick,
       seed: state.seed,
       events: this.eventsCopy,

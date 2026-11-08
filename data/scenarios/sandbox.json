@@ -1,0 +1,13 @@
+{
+  "id": "sandbox",
+  "name": "Harbour Bay: Sandbox (10x cash)",
+  "epochYear": 2000,
+  "companies": [
+    {
+      "name": "Harbour Loaf Company",
+      "controller": "player",
+      "startingCash": 180000000,
+      "homeCity": "harbour_bay"
+    }
+  ]
+}

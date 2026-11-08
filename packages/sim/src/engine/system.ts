@@ -153,6 +153,14 @@ export interface ServiceHandle<S> {
   state(): DeepReadonly<WorldState>;
   /** The immutable scenario the world was created from (survives `restore`; same as `ctx.scenario`). */
   scenario(): DeepReadonly<Scenario>;
+  /**
+   * The world's live service registry (same lookups as `ctx.services`). Services are created in
+   * `SYSTEM_ORDER`, so during `createService` only earlier systems' services are present; lookups made
+   * lazily inside a service method see every registered service. A service may call only services of
+   * systems EARLIER in `SYSTEM_ORDER`; calling a later system's service is a dependency-direction
+   * violation (reviewed, not enforced). Missing keys throw `InvariantError('services.missing')`.
+   */
+  readonly services: ServiceRegistry;
   tick(): number;
   date(): CalendarDate;
   issueId<K extends EntityKind>(kind: K): IdOf<K>;
