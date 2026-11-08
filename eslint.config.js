@@ -6,11 +6,31 @@ import tseslint from 'typescript-eslint';
 const determinismBans = {
   'no-restricted-properties': [
     'error',
-    { object: 'Math', property: 'random', message: 'Use the engine seeded RNG (determinism rule 2).' },
-    { object: 'Date', property: 'now', message: 'Use the engine calendar/tick (determinism rule 2).' },
-    { object: 'performance', property: 'now', message: 'No wall-clock time in the sim (determinism rule 2).' },
-    { object: 'crypto', property: 'randomUUID', message: 'Use registry-issued stable IDs (determinism rule 2).' },
-    { object: 'crypto', property: 'getRandomValues', message: 'Use the engine seeded RNG (determinism rule 2).' },
+    {
+      object: 'Math',
+      property: 'random',
+      message: 'Use the engine seeded RNG (determinism rule 2).',
+    },
+    {
+      object: 'Date',
+      property: 'now',
+      message: 'Use the engine calendar/tick (determinism rule 2).',
+    },
+    {
+      object: 'performance',
+      property: 'now',
+      message: 'No wall-clock time in the sim (determinism rule 2).',
+    },
+    {
+      object: 'crypto',
+      property: 'randomUUID',
+      message: 'Use registry-issued stable IDs (determinism rule 2).',
+    },
+    {
+      object: 'crypto',
+      property: 'getRandomValues',
+      message: 'Use the engine seeded RNG (determinism rule 2).',
+    },
   ],
   'no-restricted-globals': [
     'error',
@@ -20,8 +40,14 @@ const determinismBans = {
   ],
   'no-restricted-syntax': [
     'error',
-    { selector: 'NewExpression[callee.name="Date"]', message: 'No wall-clock time in the sim core.' },
-    { selector: 'ForInStatement', message: 'for-in order is hazardous; iterate sorted keys explicitly.' },
+    {
+      selector: 'NewExpression[callee.name="Date"]',
+      message: 'No wall-clock time in the sim core.',
+    },
+    {
+      selector: 'ForInStatement',
+      message: 'for-in order is hazardous; iterate sorted keys explicitly.',
+    },
   ],
 };
 
@@ -41,7 +67,10 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
       '@typescript-eslint/explicit-module-boundary-types': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
@@ -58,9 +87,18 @@ export default tseslint.config(
         'error',
         {
           patterns: [
-            { group: ['@nepo/ui', '@nepo/ui/*', '**/packages/ui/**'], message: 'Sim core never imports UI (rule 1).' },
-            { group: ['react', 'react-dom', 'vite'], message: 'Sim core has no UI dependencies (rule 1).' },
-            { group: ['node:*', 'fs', 'path', 'os', 'child_process'], message: 'Sim core is platform-agnostic.' },
+            {
+              group: ['@nepo/ui', '@nepo/ui/*', '**/packages/ui/**'],
+              message: 'Sim core never imports UI (rule 1).',
+            },
+            {
+              group: ['react', 'react-dom', 'vite'],
+              message: 'Sim core has no UI dependencies (rule 1).',
+            },
+            {
+              group: ['node:*', 'fs', 'path', 'os', 'child_process'],
+              message: 'Sim core is platform-agnostic.',
+            },
           ],
         },
       ],

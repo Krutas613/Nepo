@@ -3,11 +3,13 @@
 **Status:** Accepted (Milestone 0)
 
 ## Context
+
 Rules 4 and 5: every money movement is a balanced double-entry posting and money is stored as integer
 minor units. Floats cannot reconcile; `bigint` does not serialize to JSON, is slow, and cannot mix with
 ordinary arithmetic. Rounding must happen in one place or balances drift between systems.
 
 ## Decision
+
 - `Money = Brand<number, 'Money'>`, integer minor units (cents), may be negative. Every construction
   (`money(n)`), every `addMoney`/`subMoney`, and every ledger posting asserts `Number.isSafeInteger`;
   violation throws `InvariantError('money.unsafe')`. Scenarios are rejected if total starting cash
@@ -23,6 +25,7 @@ ordinary arithmetic. Rounding must happen in one place or balances drift between
 - Unit prices are `Money` per unit; content picks units so prices are at least one minor unit.
 
 ## Consequences
+
 - Every system depends on accounting (dependency direction schema <- engine <- accounting <- domains).
 - Interest and tax computations are integer-exact and reproducible; small per-day rounding bias is
   accepted and documented.

@@ -5,37 +5,37 @@ Companion to ARCHITECTURE.md section 8. Owner of the code: `accounting`. State t
 
 ## 1. Standard chart of accounts (`STANDARD_CHART`, `ACCOUNTS`)
 
-| Code | Name | Type | `ACCOUNTS.` |
-|---|---|---|---|
-| 1000 | Cash | asset | CASH |
-| 1100 | Accounts Receivable | asset | RECEIVABLES |
-| 1200 | Inventory - Raw Materials | asset | INVENTORY_RAW |
-| 1210 | Inventory - Finished Goods | asset | INVENTORY_FINISHED |
-| 1220 | Inventory - In Transit | asset | INVENTORY_TRANSIT |
-| 1500 | Property, Plant & Equipment | asset | PPE |
-| 1590 | Accumulated Depreciation | asset (contra, credit balance) | ACCUM_DEPRECIATION |
-| 1800 | Investments in Subsidiaries | asset | INVESTMENTS |
-| 1900 | Intercompany Receivable | asset | INTERCO_RECEIVABLE |
-| 2000 | Accounts Payable | liability | PAYABLES |
-| 2100 | Accrued Interest Payable | liability | INTEREST_PAYABLE |
-| 2200 | Income Tax Payable | liability | TAX_PAYABLE |
-| 2500 | Loans Payable | liability | LOANS |
-| 2900 | Intercompany Payable | liability | INTERCO_PAYABLE |
-| 3000 | Share Capital | equity | SHARE_CAPITAL |
-| 3100 | Retained Earnings | equity | RETAINED_EARNINGS |
-| 4000 | Sales Revenue | revenue | SALES |
-| 4900 | Intercompany Revenue | revenue | INTERCO_SALES |
-| 5000 | Cost of Goods Sold | expense | COGS |
-| 5900 | Intercompany COGS | expense | INTERCO_COGS |
-| 6000 | Facility Operating Expense | expense | OPEX_FACILITY |
-| 6100 | Wages and Salaries | expense | WAGES |
-| 6200 | Depreciation Expense | expense | DEPRECIATION |
-| 6300 | Marketing | expense | MARKETING |
-| 6900 | Other Operating Expense | expense | OPEX_OTHER |
-| 7000 | Interest Expense | expense | INTEREST_EXPENSE |
-| 7100 | Interest Income | expense (credit balance; reported in otherIncome) | INTEREST_INCOME |
-| 7500 | Gain/Loss on Disposal | expense | DISPOSAL_GAIN_LOSS |
-| 7900 | Income Tax Expense | expense | INCOME_TAX |
+| Code | Name                        | Type                                              | `ACCOUNTS.`        |
+| ---- | --------------------------- | ------------------------------------------------- | ------------------ |
+| 1000 | Cash                        | asset                                             | CASH               |
+| 1100 | Accounts Receivable         | asset                                             | RECEIVABLES        |
+| 1200 | Inventory - Raw Materials   | asset                                             | INVENTORY_RAW      |
+| 1210 | Inventory - Finished Goods  | asset                                             | INVENTORY_FINISHED |
+| 1220 | Inventory - In Transit      | asset                                             | INVENTORY_TRANSIT  |
+| 1500 | Property, Plant & Equipment | asset                                             | PPE                |
+| 1590 | Accumulated Depreciation    | asset (contra, credit balance)                    | ACCUM_DEPRECIATION |
+| 1800 | Investments in Subsidiaries | asset                                             | INVESTMENTS        |
+| 1900 | Intercompany Receivable     | asset                                             | INTERCO_RECEIVABLE |
+| 2000 | Accounts Payable            | liability                                         | PAYABLES           |
+| 2100 | Accrued Interest Payable    | liability                                         | INTEREST_PAYABLE   |
+| 2200 | Income Tax Payable          | liability                                         | TAX_PAYABLE        |
+| 2500 | Loans Payable               | liability                                         | LOANS              |
+| 2900 | Intercompany Payable        | liability                                         | INTERCO_PAYABLE    |
+| 3000 | Share Capital               | equity                                            | SHARE_CAPITAL      |
+| 3100 | Retained Earnings           | equity                                            | RETAINED_EARNINGS  |
+| 4000 | Sales Revenue               | revenue                                           | SALES              |
+| 4900 | Intercompany Revenue        | revenue                                           | INTERCO_SALES      |
+| 5000 | Cost of Goods Sold          | expense                                           | COGS               |
+| 5900 | Intercompany COGS           | expense                                           | INTERCO_COGS       |
+| 6000 | Facility Operating Expense  | expense                                           | OPEX_FACILITY      |
+| 6100 | Wages and Salaries          | expense                                           | WAGES              |
+| 6200 | Depreciation Expense        | expense                                           | DEPRECIATION       |
+| 6300 | Marketing                   | expense                                           | MARKETING          |
+| 6900 | Other Operating Expense     | expense                                           | OPEX_OTHER         |
+| 7000 | Interest Expense            | expense                                           | INTEREST_EXPENSE   |
+| 7100 | Interest Income             | expense (credit balance; reported in otherIncome) | INTEREST_INCOME    |
+| 7500 | Gain/Loss on Disposal       | expense                                           | DISPOSAL_GAIN_LOSS |
+| 7900 | Income Tax Expense          | expense                                           | INCOME_TAX         |
 
 `accountTypeOf(code)`: `1`->asset, `2`->liability, `3`->equity, `4`->revenue, `5|6|7`->expense.
 Adding accounts is an accounting-module change; codes are never renumbered.
@@ -51,17 +51,17 @@ lines); `invalid_line` (a side not a positive safe integer, both sides non-zero,
 
 Builders (all return `JournalEntryInput`, all take `source: SystemId`):
 
-| Builder | Lines |
-|---|---|
-| `openingCapital(amount)` | Dr 1000 / Cr 3000 |
-| `cashSale(revenue, cogs)` | Dr 1000 revenue, Cr 4000 revenue; Dr 5000 cogs, Cr 1210 cogs (cogs may be 0: omit pair) |
-| `cashPurchase(account, amount)` | Dr `account` / Cr 1000 |
-| `loanDrawdown(amount)` | Dr 1000 / Cr 2500 |
-| `loanRepayment(principal, interest)` | Dr 2500 principal, Dr 2100 interest (if accrued) / Cr 1000 total |
-| `interestAccrual(amount)` | Dr 7000 / Cr 2100 |
-| `depreciation(amount)` | Dr 6200 / Cr 1590 |
-| `payroll(amount)` | Dr 6100 / Cr 1000 |
-| `closingEntry(entity)` | moves every 4-7xxx balance to 3100 (built by accounting at year end) |
+| Builder                              | Lines                                                                                   |
+| ------------------------------------ | --------------------------------------------------------------------------------------- |
+| `openingCapital(amount)`             | Dr 1000 / Cr 3000                                                                       |
+| `cashSale(revenue, cogs)`            | Dr 1000 revenue, Cr 4000 revenue; Dr 5000 cogs, Cr 1210 cogs (cogs may be 0: omit pair) |
+| `cashPurchase(account, amount)`      | Dr `account` / Cr 1000                                                                  |
+| `loanDrawdown(amount)`               | Dr 1000 / Cr 2500                                                                       |
+| `loanRepayment(principal, interest)` | Dr 2500 principal, Dr 2100 interest (if accrued) / Cr 1000 total                        |
+| `interestAccrual(amount)`            | Dr 7000 / Cr 2100                                                                       |
+| `depreciation(amount)`               | Dr 6200 / Cr 1590                                                                       |
+| `payroll(amount)`                    | Dr 6100 / Cr 1000                                                                       |
+| `closingEntry(entity)`               | moves every 4-7xxx balance to 3100 (built by accounting at year end)                    |
 
 ## 3. Statements
 

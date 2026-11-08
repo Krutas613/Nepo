@@ -3,11 +3,13 @@
 **Status:** Accepted (Milestone 0)
 
 ## Context
+
 Rule 6: shared types have one owner. Many agents work in parallel; if each adds fields to shared
 types, the state shape forks and saves break. Slice types, command and event unions, and data-file
 validators are all shared because the UI, sim-tests and the save format depend on them.
 
 ## Decision
+
 - Only `schema` edits `packages/sim/src/schema`. It contains: brands and IDs, `Money`/`Quantity`,
   `Result`, errors, `SystemId`/`SYSTEM_ORDER`, `Company`, `Scenario`, `WorldState` and every slice
   type, `Command`/`Event` unions, zod validators, `Snapshot`, content types, fixtures.
@@ -22,6 +24,7 @@ validators are all shared because the UI, sim-tests and the save format depend o
   discrepancies at merge resolve in favour of ARCHITECTURE.md.
 
 ## Consequences
+
 - Domain agents experience a short delay for new fields; in exchange, saves and the UI never see
   surprise shapes.
 - Schema must stay thin and fast to respond; it does not design systems, it records their contracts.

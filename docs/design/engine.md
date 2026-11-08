@@ -109,16 +109,16 @@ so qa can fingerprint arbitrary strings (and the KAT can pin `hashString('nepo')
 
 ## 6. Test matrix (engine)
 
-| Test | Assertion |
-|---|---|
-| rng KAT | first 4 outputs for fixed state and for `seedStream(42,'accounting')` |
-| rng independence | drawing from `economy` does not change the next value of `accounting` |
-| int unbiased-ish | fast-check: outputs within `[min,max]`; `range===1` draws nothing |
-| calendar | ticks 0, 29, 30, 89, 90, 359, 360, 719 map to expected dates and flags |
-| canonical JSON | key order, `-0`, nested arrays, rejection of Map/undefined/NaN |
-| hash KAT | `hashString('')` and `hashString('nepo')` pinned |
-| determinism | 2 fresh worlds (SMOKE_SCENARIO, no systems), 200 ticks, equal hash each tick |
-| snapshot equivalence | snapshot at 73, restore, run to 200, hash equals uninterrupted run |
-| commands | ordering by seq across issuers; unknown_issuer; no_handler; shape error from submit |
-| phases | recording test system sees phases 1..8 in order, systems in SYSTEM_ORDER |
-| ownership | test system writing a foreign slice under `checkSliceOwnership` throws |
+| Test                 | Assertion                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| rng KAT              | first 4 outputs for fixed state and for `seedStream(42,'accounting')`               |
+| rng independence     | drawing from `economy` does not change the next value of `accounting`               |
+| int unbiased-ish     | fast-check: outputs within `[min,max]`; `range===1` draws nothing                   |
+| calendar             | ticks 0, 29, 30, 89, 90, 359, 360, 719 map to expected dates and flags              |
+| canonical JSON       | key order, `-0`, nested arrays, rejection of Map/undefined/NaN                      |
+| hash KAT             | `hashString('')` and `hashString('nepo')` pinned                                    |
+| determinism          | 2 fresh worlds (SMOKE_SCENARIO, no systems), 200 ticks, equal hash each tick        |
+| snapshot equivalence | snapshot at 73, restore, run to 200, hash equals uninterrupted run                  |
+| commands             | ordering by seq across issuers; unknown_issuer; no_handler; shape error from submit |
+| phases               | recording test system sees phases 1..8 in order, systems in SYSTEM_ORDER            |
+| ownership            | test system writing a foreign slice under `checkSliceOwnership` throws              |

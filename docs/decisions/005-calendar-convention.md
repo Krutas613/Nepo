@@ -3,11 +3,13 @@
 **Status:** Accepted (Milestone 0)
 
 ## Context
+
 1 tick = 1 day and months, quarters and years derive from ticks. A real Gregorian calendar brings
 uneven month lengths, leap years and weekends, which make monthly statements non-comparable, daily
 accrual rates inexact (annual/365 vs 366), and add logic with no gameplay value.
 
 ## Decision
+
 - Fixed calendar: 12 months x 30 days = 360 days; quarters are 90 days. Tick 0 is day 1, month 1 of
   `scenario.epochYear`. Every day is a business day.
 - `CalendarDate` carries `year, month, day, quarter, dayOfYear` and boolean flags `isMonthStart`,
@@ -17,6 +19,7 @@ accrual rates inexact (annual/365 vs 366), and add logic with no gameplay value.
 - Daily rates are `annualRate / 360`.
 
 ## Consequences
+
 - Every month is identical in length, so month-over-month comparisons and accruals are exact and
   simple; a "year" is exactly 360 ticks (`--years 5` = 1800 ticks).
 - The UI may display dates as `Y3 M07 D12` or map them onto a nominal real calendar for flavour; the

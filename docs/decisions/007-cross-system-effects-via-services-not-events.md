@@ -3,6 +3,7 @@
 **Status:** Accepted (Milestone 0)
 
 ## Context
+
 Systems must not mutate each other's slices, yet manufacturing must post costs, retail must query
 demand, finance must read consolidated statements. Two designs were considered: (a) systems emit
 events that other systems consume next phase/tick; (b) systems expose a narrow synchronous API that
@@ -11,6 +12,7 @@ change in one phase, the posting a phase later), bloats state if the log is pers
 ordering subtle.
 
 ## Decision
+
 - A system may expose a **service**: an object created once per world by `System.createService(handle)`
   and registered under a branded `ServiceKey<T>` (e.g. `ACCOUNTING_SERVICE: ServiceKey<AccountingApi>`).
   Callers obtain it via `ctx.services.get(key)`. Service methods run synchronously inside the caller's
@@ -22,6 +24,7 @@ ordering subtle.
 - Reads of other systems happen through `ctx.state` (`DeepReadonly`) or the owner's service.
 
 ## Consequences
+
 - Money movement is atomic with the business event that caused it (post inside the same phase).
 - Service call order is deterministic because callers run in fixed phase/system order.
 - Services hold no state outside their slice (snapshot/restore equivalence enforces this).

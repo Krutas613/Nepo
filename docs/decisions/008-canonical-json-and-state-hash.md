@@ -3,12 +3,14 @@
 **Status:** Accepted (Milestone 0)
 
 ## Context
+
 Determinism is proven by comparing state fingerprints across runs and after snapshot/restore. The
 fingerprint must be identical across JS engines and browsers, dependency-free, fast enough to run every
 tick in sweeps, and stable forever because it becomes part of regression snapshots. `JSON.stringify`
 is unsuitable: key order follows insertion order.
 
 ## Decision
+
 - `canonicalJson(value)`: recursive; object keys sorted by UTF-16 code-unit order; arrays in order;
   strings via `JSON.stringify`; numbers via `String(n)` (ECMAScript fully specifies `Number::toString`);
   `-0` written as `0`; throws `InvariantError('canon.unsupported')` for `undefined`, functions, symbols,
@@ -22,6 +24,7 @@ is unsuitable: key order follows insertion order.
   regression snapshots.
 
 ## Consequences
+
 - Any state the canonicaliser rejects is also a determinism hazard, so `snapshot()` using
   `JSON.parse(canonicalJson(state))` doubles as a serializability test.
 - Hashing is O(state size); `step()` never hashes unless asked, and long sweeps may hash at period

@@ -21,14 +21,14 @@ packages/ui, packages/tools, packages/sim-tests  ---- import only from @nepo/sim
 
 An arrow `A <- B` means B may import A. Nothing imports in the other direction. Concretely:
 
-| Directory (`packages/sim/src/...`) | Owner | May import | Exports (public surface via `index.ts`) |
-|---|---|---|---|
-| `schema/` | schema | `zod` only | Brands/IDs, `Money`, `Quantity`, `Result`, errors, `SystemId`, `Company`, `Scenario`, `WorldState` and all slice types, `Command`/`Event` unions, zod validators, fixtures |
-| `engine/` | engine | schema | `createWorld`, `step`, `submit`, `snapshot`, `restore`, `hashState`, `canonicalJson`, `findNonFinite`, `calendarFromTick`, `Rng`, `System`, `TickContext`, `Phase`, `ServiceKey`, `sortedKeys`, `DeepReadonly`, `ENGINE_VERSION` |
-| `accounting/` | accounting | schema, engine | `accountingSystem`, `ACCOUNTING_SERVICE`, `AccountingApi`, `ACCOUNTS`, `STANDARD_CHART`, rounding helpers, entry builders, `checkLedgerInvariants` |
-| `economy/ manufacturing/ logistics/ retail/ finance/ hr/` | each its agent | schema, engine, accounting (and `economy` for price queries) | its `System` object and its `ServiceKey` + API |
-| `ai/` | ai-competitors | schema, engine, and any system's public API | `aiSystem` |
-| `index.ts` (sim root) | orchestrator (composition root) | everything above | `export *` of each module plus `DEFAULT_SYSTEMS` (added after M0 lands) |
+| Directory (`packages/sim/src/...`)                        | Owner                           | May import                                                   | Exports (public surface via `index.ts`)                                                                                                                                                                                          |
+| --------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema/`                                                 | schema                          | `zod` only                                                   | Brands/IDs, `Money`, `Quantity`, `Result`, errors, `SystemId`, `Company`, `Scenario`, `WorldState` and all slice types, `Command`/`Event` unions, zod validators, fixtures                                                       |
+| `engine/`                                                 | engine                          | schema                                                       | `createWorld`, `step`, `submit`, `snapshot`, `restore`, `hashState`, `canonicalJson`, `findNonFinite`, `calendarFromTick`, `Rng`, `System`, `TickContext`, `Phase`, `ServiceKey`, `sortedKeys`, `DeepReadonly`, `ENGINE_VERSION` |
+| `accounting/`                                             | accounting                      | schema, engine                                               | `accountingSystem`, `ACCOUNTING_SERVICE`, `AccountingApi`, `ACCOUNTS`, `STANDARD_CHART`, rounding helpers, entry builders, `checkLedgerInvariants`                                                                               |
+| `economy/ manufacturing/ logistics/ retail/ finance/ hr/` | each its agent                  | schema, engine, accounting (and `economy` for price queries) | its `System` object and its `ServiceKey` + API                                                                                                                                                                                   |
+| `ai/`                                                     | ai-competitors                  | schema, engine, and any system's public API                  | `aiSystem`                                                                                                                                                                                                                       |
+| `index.ts` (sim root)                                     | orchestrator (composition root) | everything above                                             | `export *` of each module plus `DEFAULT_SYSTEMS` (added after M0 lands)                                                                                                                                                          |
 
 Rules:
 
@@ -54,15 +54,15 @@ values (optional fields are omitted, never set to `undefined`; `null` is allowed
 ```ts
 // schema/world.ts
 interface WorldState {
-  seed: number;                       // non-negative safe integer; the world seed
-  tick: number;                       // ticks completed = the tick `step` will execute next
-  epochYear: number;                  // calendar year of tick 0 (from scenario)
-  commandSeq: number;                 // last issued command sequence number (global, monotonic)
-  pendingCommands: Command[];         // queued for the next tick's ingest phase, ascending seq
-  registry: RegistryState;            // ID counters (section 3)
-  rng: Record<string, RngStreamState>;// stream name -> state (section 9)
-  companies: Record<CompanyId, Company>;   // core slice, owned by the engine's `core` system
-  accounting: AccountingState;        // owned by accounting (section 8)
+  seed: number; // non-negative safe integer; the world seed
+  tick: number; // ticks completed = the tick `step` will execute next
+  epochYear: number; // calendar year of tick 0 (from scenario)
+  commandSeq: number; // last issued command sequence number (global, monotonic)
+  pendingCommands: Command[]; // queued for the next tick's ingest phase, ascending seq
+  registry: RegistryState; // ID counters (section 3)
+  rng: Record<string, RngStreamState>; // stream name -> state (section 9)
+  companies: Record<CompanyId, Company>; // core slice, owned by the engine's `core` system
+  accounting: AccountingState; // owned by accounting (section 8)
   // Milestone 1+: economy, manufacturing, retail, finance; M2: logistics; M3: ai; M4: hr.
   // Each is added by the schema agent as a new required property (a schema version bump + migration).
 }
@@ -131,12 +131,12 @@ are validated by schema's zod validators. They are never issued by the registry.
 
 ```ts
 // schema/money.ts
-type Money = Brand<number, 'Money'>;        // integer minor units (cents); may be negative
-type Quantity = Brand<number, 'Quantity'>;  // integer count of units; never negative in state
-function money(n: number): Money;           // throws InvariantError('money.unsafe') unless Number.isSafeInteger(n)
-function quantity(n: number): Quantity;     // same check, plus n >= 0
+type Money = Brand<number, 'Money'>; // integer minor units (cents); may be negative
+type Quantity = Brand<number, 'Quantity'>; // integer count of units; never negative in state
+function money(n: number): Money; // throws InvariantError('money.unsafe') unless Number.isSafeInteger(n)
+function quantity(n: number): Quantity; // same check, plus n >= 0
 const ZERO_MONEY: Money;
-function addMoney(a: Money, b: Money): Money;   // re-checks safe-integer range
+function addMoney(a: Money, b: Money): Money; // re-checks safe-integer range
 function subMoney(a: Money, b: Money): Money;
 ```
 
@@ -166,17 +166,19 @@ function subMoney(a: Money, b: Money): Money;
 // engine/calendar.ts
 interface CalendarDate {
   tick: number;
-  year: number;        // epochYear + floor(tick / 360)
-  month: number;       // 1..12
-  day: number;         // 1..30
-  quarter: number;     // 1..4
-  dayOfYear: number;   // 1..360
-  isMonthStart: boolean;   // day === 1
-  isMonthEnd: boolean;     // day === 30
-  isQuarterEnd: boolean;   // isMonthEnd && month % 3 === 0
-  isYearEnd: boolean;      // isMonthEnd && month === 12
+  year: number; // epochYear + floor(tick / 360)
+  month: number; // 1..12
+  day: number; // 1..30
+  quarter: number; // 1..4
+  dayOfYear: number; // 1..360
+  isMonthStart: boolean; // day === 1
+  isMonthEnd: boolean; // day === 30
+  isQuarterEnd: boolean; // isMonthEnd && month % 3 === 0
+  isYearEnd: boolean; // isMonthEnd && month === 12
 }
-const DAYS_PER_MONTH = 30, MONTHS_PER_YEAR = 12, DAYS_PER_YEAR = 360;
+const DAYS_PER_MONTH = 30,
+  MONTHS_PER_YEAR = 12,
+  DAYS_PER_YEAR = 360;
 function calendarFromTick(tick: number, epochYear: number): CalendarDate;
 ```
 
@@ -196,18 +198,18 @@ Every call to `step(world)` executes the phases below in order. Within a phase, 
 canonical order `SYSTEM_ORDER` (schema): `core, accounting, economy, manufacturing, logistics, retail,
 finance, ai, hr`. The engine sorts registered systems by this order, so caller order is irrelevant.
 
-| # | Phase | Who | What | Why here |
-|---|---|---|---|---|
-| 0 | `ingest` | engine | Drain `state.pendingCommands` (ascending `seq`), reject commands whose issuer is not in `state.companies` or whose type has no handler, route the rest to the handling system's inbox for this tick. | Commands issued during tick t-1 (AI) or between ticks (player) take effect at the start of tick t; everyone sees the same inputs. |
-| 1 | `apply` | all systems | Each system processes its routed commands: validate semantics (ownership, affordability), mutate own slice, post to the ledger, emit events, or `ctx.reject`. | Decisions are applied before any simulation so the day's activity reflects them. |
-| 2 | `macro` | economy | Business cycle, inflation, rate environment, baseline regional demand for the day. | Depends on nothing produced today; everything else reads it. |
-| 3 | `production` | manufacturing (hr later) | Consume inputs, produce outputs, operating costs. | Needs today's input prices (macro). |
-| 4 | `logistics` | logistics | Advance shipments, arrivals into warehouses/stores, fulfil transfer orders. | Needs today's production output. |
-| 5 | `market` | retail, economy, manufacturing (B2B sales) | Retail sales against demand, market clearing, B2B contract deliveries, markdowns. | Needs goods on shelves (logistics) and demand (macro). |
-| 6 | `finance` | finance | Interest accrual, scheduled repayments, dividends, defaults, stock-price update, ratings. | Needs the day's cash flows (market) to assess liquidity. |
-| 7 | `close` | accounting, then others | On `isMonthEnd`: accounting closes the period (statements), then quarter/year work (tax, closing entries). Other systems may hook `close` for month-end postings (depreciation) only when `date.isMonthEnd`. | Runs after every money movement of the day so statements are complete. |
-| 8 | `decide` | ai | Read state and today's events, submit commands for tick t+1 via `ctx.submit`. | AI sees the completed day exactly as the player will; its commands queue like the player's. |
-| 9 | `finalize` | engine | Seal the event log, `state.tick += 1`, run debug checks if requested. | Nothing after this may touch state. |
+| #   | Phase        | Who                                        | What                                                                                                                                                                                                         | Why here                                                                                                                          |
+| --- | ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | `ingest`     | engine                                     | Drain `state.pendingCommands` (ascending `seq`), reject commands whose issuer is not in `state.companies` or whose type has no handler, route the rest to the handling system's inbox for this tick.         | Commands issued during tick t-1 (AI) or between ticks (player) take effect at the start of tick t; everyone sees the same inputs. |
+| 1   | `apply`      | all systems                                | Each system processes its routed commands: validate semantics (ownership, affordability), mutate own slice, post to the ledger, emit events, or `ctx.reject`.                                                | Decisions are applied before any simulation so the day's activity reflects them.                                                  |
+| 2   | `macro`      | economy                                    | Business cycle, inflation, rate environment, baseline regional demand for the day.                                                                                                                           | Depends on nothing produced today; everything else reads it.                                                                      |
+| 3   | `production` | manufacturing (hr later)                   | Consume inputs, produce outputs, operating costs.                                                                                                                                                            | Needs today's input prices (macro).                                                                                               |
+| 4   | `logistics`  | logistics                                  | Advance shipments, arrivals into warehouses/stores, fulfil transfer orders.                                                                                                                                  | Needs today's production output.                                                                                                  |
+| 5   | `market`     | retail, economy, manufacturing (B2B sales) | Retail sales against demand, market clearing, B2B contract deliveries, markdowns.                                                                                                                            | Needs goods on shelves (logistics) and demand (macro).                                                                            |
+| 6   | `finance`    | finance                                    | Interest accrual, scheduled repayments, dividends, defaults, stock-price update, ratings.                                                                                                                    | Needs the day's cash flows (market) to assess liquidity.                                                                          |
+| 7   | `close`      | accounting, then others                    | On `isMonthEnd`: accounting closes the period (statements), then quarter/year work (tax, closing entries). Other systems may hook `close` for month-end postings (depreciation) only when `date.isMonthEnd`. | Runs after every money movement of the day so statements are complete.                                                            |
+| 8   | `decide`     | ai                                         | Read state and today's events, submit commands for tick t+1 via `ctx.submit`.                                                                                                                                | AI sees the completed day exactly as the player will; its commands queue like the player's.                                       |
+| 9   | `finalize`   | engine                                     | Seal the event log, `state.tick += 1`, run debug checks if requested.                                                                                                                                        | Nothing after this may touch state.                                                                                               |
 
 Systems may register handlers for phases 1-8 only. `ingest` and `finalize` are engine-only; registering
 them is an `InvariantError`. `ctx.submit` is legal only in phase `decide` (InvariantError otherwise).
@@ -218,28 +220,38 @@ monthly hooks.
 
 ```ts
 // engine/system.ts
-type Phase = 'ingest' | 'apply' | 'macro' | 'production' | 'logistics' | 'market' | 'finance' | 'close' | 'decide' | 'finalize';
+type Phase =
+  | 'ingest'
+  | 'apply'
+  | 'macro'
+  | 'production'
+  | 'logistics'
+  | 'market'
+  | 'finance'
+  | 'close'
+  | 'decide'
+  | 'finalize';
 const PHASE_ORDER: readonly Phase[];
 type SystemPhase = Exclude<Phase, 'ingest' | 'finalize'>;
 
 interface System<S> {
-  readonly id: SystemId;                               // schema literal union; also the slice key in WorldState
-  readonly handles: readonly Command['type'][];        // command types routed to this system (unique across systems)
-  init(ctx: InitContext): S;                           // returns the initial slice; may issue IDs, post, emit
+  readonly id: SystemId; // schema literal union; also the slice key in WorldState
+  readonly handles: readonly Command['type'][]; // command types routed to this system (unique across systems)
+  init(ctx: InitContext): S; // returns the initial slice; may issue IDs, post, emit
   readonly phases: Partial<Record<SystemPhase, (ctx: TickContext<S>) => void>>;
-  createService?(handle: ServiceHandle<S>): unknown;   // optional: returns the object registered under this system's ServiceKey
-  readonly serviceKey?: ServiceKey<unknown>;           // required if createService is present
+  createService?(handle: ServiceHandle<S>): unknown; // optional: returns the object registered under this system's ServiceKey
+  readonly serviceKey?: ServiceKey<unknown>; // required if createService is present
 }
 type AnySystem = System<unknown>;
 
 interface InitContext {
   readonly seed: number;
   readonly scenario: DeepReadonly<Scenario>;
-  readonly state: DeepReadonly<WorldState>;            // slices of systems earlier in SYSTEM_ORDER are already initialised
-  readonly rng: Rng;                                   // stream `${systemId}` (section 9)
+  readonly state: DeepReadonly<WorldState>; // slices of systems earlier in SYSTEM_ORDER are already initialised
+  readonly rng: Rng; // stream `${systemId}` (section 9)
   issueId<K extends EntityKind>(kind: K): IdOf<K>;
-  emit(event: EventInput): void;                       // events emitted during init belong to tick 0's pre-run log
-  readonly services: ServiceRegistry;                  // services of systems earlier in SYSTEM_ORDER
+  emit(event: EventInput): void; // events emitted during init belong to tick 0's pre-run log
+  readonly services: ServiceRegistry; // services of systems earlier in SYSTEM_ORDER
 }
 
 interface TickContext<S> {
@@ -247,21 +259,22 @@ interface TickContext<S> {
   readonly date: CalendarDate;
   readonly phase: SystemPhase;
   readonly scenario: DeepReadonly<Scenario>;
-  readonly state: DeepReadonly<WorldState>;            // whole world, read-only
-  readonly slice: S;                                   // this system's slice, mutable (the ONLY mutable thing)
-  readonly rng: Rng;                                   // default stream `${systemId}`
-  rngFor(name: string): Rng;                           // sub-stream `${systemId}/${name}`, created lazily
-  readonly commands: readonly Command[];               // routed to this system this tick, ascending seq (same in every phase)
-  readonly events: readonly Event[];                   // everything emitted so far this tick, by all systems
+  readonly state: DeepReadonly<WorldState>; // whole world, read-only
+  readonly slice: S; // this system's slice, mutable (the ONLY mutable thing)
+  readonly rng: Rng; // default stream `${systemId}`
+  rngFor(name: string): Rng; // sub-stream `${systemId}/${name}`, created lazily
+  readonly commands: readonly Command[]; // routed to this system this tick, ascending seq (same in every phase)
+  readonly events: readonly Event[]; // everything emitted so far this tick, by all systems
   emit(event: EventInput): void;
-  reject(command: Command, code: string, reason: string): void;  // emits command.rejected
+  reject(command: Command, code: string, reason: string): void; // emits command.rejected
   submit(command: CommandInput): Result<number, CommandValidationError>; // decide phase only
   issueId<K extends EntityKind>(kind: K): IdOf<K>;
   readonly services: ServiceRegistry;
 }
 
-interface ServiceHandle<S> {                           // what a service closes over (lives for the world's lifetime)
-  slice(): S;                                          // current own slice (mutable)
+interface ServiceHandle<S> {
+  // what a service closes over (lives for the world's lifetime)
+  slice(): S; // current own slice (mutable)
   state(): DeepReadonly<WorldState>;
   tick(): number;
   date(): CalendarDate;
@@ -271,7 +284,9 @@ interface ServiceHandle<S> {                           // what a service closes 
 
 type ServiceKey<T> = Brand<string, 'ServiceKey'> & { readonly __type?: T };
 function createServiceKey<T>(name: string): ServiceKey<T>;
-interface ServiceRegistry { get<T>(key: ServiceKey<T>): T; }  // InvariantError if missing
+interface ServiceRegistry {
+  get<T>(key: ServiceKey<T>): T;
+} // InvariantError if missing
 ```
 
 `DeepReadonly` is a type-level guard only; the engine does not freeze state (too slow). Ownership is
@@ -289,24 +304,36 @@ their ordering is deterministic.
 
 ```ts
 // engine/index.ts
-interface World {                                      // runtime container, NOT state; opaque beyond these fields
-  readonly state: WorldState;                          // live; outside the engine treat as read-only
+interface World {
+  // runtime container, NOT state; opaque beyond these fields
+  readonly state: WorldState; // live; outside the engine treat as read-only
   readonly scenario: Scenario;
-  readonly systems: readonly AnySystem[];              // in SYSTEM_ORDER
-  readonly lastEvents: readonly Event[];               // events of the most recent step (or init)
+  readonly systems: readonly AnySystem[]; // in SYSTEM_ORDER
+  readonly lastEvents: readonly Event[]; // events of the most recent step (or init)
 }
-interface CreateWorldOptions { seed: number; scenario: Scenario; systems: readonly AnySystem[] }
-interface StepOptions { checkSliceOwnership?: boolean; checkFinite?: boolean }
-interface TickResult { tick: number; date: CalendarDate; events: readonly Event[] }
+interface CreateWorldOptions {
+  seed: number;
+  scenario: Scenario;
+  systems: readonly AnySystem[];
+}
+interface StepOptions {
+  checkSliceOwnership?: boolean;
+  checkFinite?: boolean;
+}
+interface TickResult {
+  tick: number;
+  date: CalendarDate;
+  events: readonly Event[];
+}
 
 function createWorld(options: CreateWorldOptions): World;
 function step(world: World, options?: StepOptions): TickResult;
 function submit(world: World, command: CommandInput): Result<number, CommandValidationError>; // returns seq
 function snapshot(world: World): Snapshot;
 function restore(snapshot: Snapshot, systems: readonly AnySystem[]): World; // validates, migrates, rebuilds services
-function hashState(state: WorldState): string;         // section 10
+function hashState(state: WorldState): string; // section 10
 function canonicalJson(value: unknown): string;
-function findNonFinite(value: unknown): string[];      // JSON paths of NaN/Infinity/-0
+function findNonFinite(value: unknown): string[]; // JSON paths of NaN/Infinity/-0
 const ENGINE_VERSION: string;
 ```
 
@@ -327,14 +354,24 @@ and AI issue identical command types through identical paths; there is no privil
 
 ```ts
 // schema/commands.ts  (flat discriminated union on `type`)
-interface CommandBase { seq: number; tick: number; issuer: CompanyId }
-interface RenameCompanyCommand extends CommandBase { type: 'company.rename'; payload: { name: string } }
+interface CommandBase {
+  seq: number;
+  tick: number;
+  issuer: CompanyId;
+}
+interface RenameCompanyCommand extends CommandBase {
+  type: 'company.rename';
+  payload: { name: string };
+}
 // M1 adds e.g. 'facility.build', 'store.open', 'store.set_price', 'loan.draw', ...
 type Command = RenameCompanyCommand /* | ... */;
 type CommandType = Command['type'];
-type CommandInput = DistributiveOmit<Command, 'seq' | 'tick'>;   // what submit() takes
-const CommandSchema: z.ZodType<Command>;                            // discriminatedUnion('type', [...])
-interface CommandValidationError { code: 'invalid_shape'; issues: string[] }
+type CommandInput = DistributiveOmit<Command, 'seq' | 'tick'>; // what submit() takes
+const CommandSchema: z.ZodType<Command>; // discriminatedUnion('type', [...])
+interface CommandValidationError {
+  code: 'invalid_shape';
+  issues: string[];
+}
 ```
 
 Naming: `type` is `'<domain>.<verb>'` in lower snake case. Payloads are plain data; IDs branded.
@@ -392,25 +429,78 @@ Domain systems never hold cash fields; "how much cash does company X have" is
 ```ts
 // schema/accounting.ts
 type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
-interface LedgerAccount { code: AccountCode; name: string; type: AccountType; balance: Money }
-    // balance is debit-normal signed: debits increase it, credits decrease it, for EVERY account type.
-    // Liabilities/equity/revenue therefore carry negative balances. Σ balance over an entity === 0 always.
-interface JournalLine { account: AccountCode; debit: Money; credit: Money }   // exactly one side > 0, other === 0
-interface JournalEntryInput { memo: string; lines: JournalLine[]; source: SystemId; ref?: { kind: string; id: string } }
-interface JournalEntry extends JournalEntryInput { id: JournalEntryId; entityId: CompanyId; tick: number }
+interface LedgerAccount {
+  code: AccountCode;
+  name: string;
+  type: AccountType;
+  balance: Money;
+}
+// balance is debit-normal signed: debits increase it, credits decrease it, for EVERY account type.
+// Liabilities/equity/revenue therefore carry negative balances. Σ balance over an entity === 0 always.
+interface JournalLine {
+  account: AccountCode;
+  debit: Money;
+  credit: Money;
+} // exactly one side > 0, other === 0
+interface JournalEntryInput {
+  memo: string;
+  lines: JournalLine[];
+  source: SystemId;
+  ref?: { kind: string; id: string };
+}
+interface JournalEntry extends JournalEntryInput {
+  id: JournalEntryId;
+  entityId: CompanyId;
+  tick: number;
+}
 interface EntityLedger {
   entityId: CompanyId;
-  parentId: CompanyId | null;                       // consolidation parent (used from M2)
+  parentId: CompanyId | null; // consolidation parent (used from M2)
   accounts: Record<AccountCode, LedgerAccount>;
-  monthOpening: Record<AccountCode, Money>;         // balances at the start of the current month
-  yearOpening: Record<AccountCode, Money>;          // balances at the start of the current fiscal year
-  reports: PeriodReport[];                          // append-only, chronological
+  monthOpening: Record<AccountCode, Money>; // balances at the start of the current month
+  yearOpening: Record<AccountCode, Money>; // balances at the start of the current fiscal year
+  reports: PeriodReport[]; // append-only, chronological
 }
-interface IncomeStatement { revenue: Money; cogs: Money; grossProfit: Money; opex: Money; operatingIncome: Money; otherIncome: Money; pretaxIncome: Money; incomeTax: Money; netIncome: Money; byAccount: Record<AccountCode, Money> }
-interface BalanceSheet { assets: Money; liabilities: Money; equity: Money; byAccount: Record<AccountCode, Money> } // equity includes current-period earnings; assets === liabilities + equity
-interface CashFlowStatement { netIncome: Money; operating: Money; investing: Money; financing: Money; netChange: Money; openingCash: Money; closingCash: Money }
-interface PeriodReport { kind: 'month' | 'quarter' | 'year'; year: number; month: number; tick: number; income: IncomeStatement; balance: BalanceSheet; cashFlow: CashFlowStatement }
-interface AccountingState { entities: Record<CompanyId, EntityLedger>; journal: JournalEntry[] }   // journal: all entities, posting order
+interface IncomeStatement {
+  revenue: Money;
+  cogs: Money;
+  grossProfit: Money;
+  opex: Money;
+  operatingIncome: Money;
+  otherIncome: Money;
+  pretaxIncome: Money;
+  incomeTax: Money;
+  netIncome: Money;
+  byAccount: Record<AccountCode, Money>;
+}
+interface BalanceSheet {
+  assets: Money;
+  liabilities: Money;
+  equity: Money;
+  byAccount: Record<AccountCode, Money>;
+} // equity includes current-period earnings; assets === liabilities + equity
+interface CashFlowStatement {
+  netIncome: Money;
+  operating: Money;
+  investing: Money;
+  financing: Money;
+  netChange: Money;
+  openingCash: Money;
+  closingCash: Money;
+}
+interface PeriodReport {
+  kind: 'month' | 'quarter' | 'year';
+  year: number;
+  month: number;
+  tick: number;
+  income: IncomeStatement;
+  balance: BalanceSheet;
+  cashFlow: CashFlowStatement;
+}
+interface AccountingState {
+  entities: Record<CompanyId, EntityLedger>;
+  journal: JournalEntry[];
+} // journal: all entities, posting order
 ```
 
 ### 8.2 Posting API (accounting)
@@ -418,22 +508,26 @@ interface AccountingState { entities: Record<CompanyId, EntityLedger>; journal: 
 ```ts
 // accounting/index.ts
 const ACCOUNTING_SERVICE: ServiceKey<AccountingApi>;
-type PostingErrorCode = 'unknown_entity' | 'unknown_account' | 'unbalanced' | 'invalid_line' | 'empty' | 'overflow';
-interface PostingError { code: PostingErrorCode; message: string }
+type PostingErrorCode =
+  'unknown_entity' | 'unknown_account' | 'unbalanced' | 'invalid_line' | 'empty' | 'overflow';
+interface PostingError {
+  code: PostingErrorCode;
+  message: string;
+}
 interface AccountingApi {
-  openEntity(entityId: CompanyId, parentId?: CompanyId): void;   // standard chart; InvariantError if it exists
+  openEntity(entityId: CompanyId, parentId?: CompanyId): void; // standard chart; InvariantError if it exists
   post(entityId: CompanyId, entry: JournalEntryInput): Result<JournalEntry, PostingError>;
-  postOrThrow(entityId: CompanyId, entry: JournalEntryInput): JournalEntry;   // InvariantError on err
-  balance(entityId: CompanyId, account: AccountCode): Money;     // debit-normal signed
-  cash(entityId: CompanyId): Money;                              // balance(ACCOUNTS.CASH), convenience
+  postOrThrow(entityId: CompanyId, entry: JournalEntryInput): JournalEntry; // InvariantError on err
+  balance(entityId: CompanyId, account: AccountCode): Money; // debit-normal signed
+  cash(entityId: CompanyId): Money; // balance(ACCOUNTS.CASH), convenience
   hasEntity(entityId: CompanyId): boolean;
 }
-function dr(account: AccountCode, amount: Money): JournalLine;   // builders for lines
+function dr(account: AccountCode, amount: Money): JournalLine; // builders for lines
 function cr(account: AccountCode, amount: Money): JournalLine;
 // entry builders (return JournalEntryInput): openingCapital, cashSale, cashPurchase, loanDrawdown, interestAccrual, depreciation, ...
 function scaleMoney(amount: Money, ratio: number): Money;
 function allocateMoney(total: Money, weights: readonly number[]): Money[];
-function checkLedgerInvariants(state: AccountingState): InvariantViolation[];   // for sim-tests
+function checkLedgerInvariants(state: AccountingState): InvariantViolation[]; // for sim-tests
 ```
 
 `post` validation, in order: entity exists; `lines.length >= 2`; every line has exactly one positive
@@ -482,12 +576,12 @@ stored in `state.rng[name]` so snapshots carry it. Stream names: `${systemId}` b
 ```ts
 // engine/rng.ts
 interface Rng {
-  nextU32(): number;                        // [0, 2^32)   the only primitive; everything below derives from it
-  nextFloat(): number;                      // [0, 1)  53-bit: ((hi >>> 5) * 2^26 + (lo >>> 6)) * 2^-53, hi drawn first
-  int(min: number, max: number): number;    // inclusive both ends, unbiased (rejection sampling on nextU32)
-  pick<T>(items: readonly T[]): T;          // items[int(0, len - 1)]; InvariantError on empty
-  shuffle<T>(items: T[]): T[];              // in-place Fisher-Yates from the end using int(0, i)
-  chance(p: number): boolean;               // nextFloat() < p
+  nextU32(): number; // [0, 2^32)   the only primitive; everything below derives from it
+  nextFloat(): number; // [0, 1)  53-bit: ((hi >>> 5) * 2^26 + (lo >>> 6)) * 2^-53, hi drawn first
+  int(min: number, max: number): number; // inclusive both ends, unbiased (rejection sampling on nextU32)
+  pick<T>(items: readonly T[]): T; // items[int(0, len - 1)]; InvariantError on empty
+  shuffle<T>(items: T[]): T[]; // in-place Fisher-Yates from the end using int(0, i)
+  chance(p: number): boolean; // nextFloat() < p
 }
 ```
 
@@ -541,12 +635,12 @@ and `step` calls yields byte-identical `canonicalJson(state)` at every tick, on 
 const SCHEMA_VERSION = 1;
 interface Snapshot {
   format: 'nepo/snapshot';
-  schemaVersion: number;        // of `state` as written
-  engineVersion: string;        // informational, never gates loading
-  hash: string;                 // hashState(state) at write time
-  state: WorldState;            // self-contained: seed, tick, rng streams, pendingCommands are inside
+  schemaVersion: number; // of `state` as written
+  engineVersion: string; // informational, never gates loading
+  hash: string; // hashState(state) at write time
+  state: WorldState; // self-contained: seed, tick, rng streams, pendingCommands are inside
 }
-const SnapshotSchema: z.ZodType<Snapshot>;   // deep-validates state (loading is rare; cost is acceptable)
+const SnapshotSchema: z.ZodType<Snapshot>; // deep-validates state (loading is rare; cost is acceptable)
 ```
 
 `snapshot(world)` deep-copies via `JSON.parse(canonicalJson(state))` (also proves serializability).
@@ -569,10 +663,18 @@ breaks this and is rejected in review.
 
 ```ts
 // schema/errors.ts
-class NepoError extends Error { readonly code: string; readonly details: Record<string, unknown> }
-class InvariantError extends NepoError {}   // a bug: an impossible state was reached
-class SnapshotError extends NepoError {}    // unreadable, mismatched or too-new snapshot
-function invariant(condition: unknown, code: string, message: string, details?: Record<string, unknown>): asserts condition;
+class NepoError extends Error {
+  readonly code: string;
+  readonly details: Record<string, unknown>;
+}
+class InvariantError extends NepoError {} // a bug: an impossible state was reached
+class SnapshotError extends NepoError {} // unreadable, mismatched or too-new snapshot
+function invariant(
+  condition: unknown,
+  code: string,
+  message: string,
+  details?: Record<string, unknown>,
+): asserts condition;
 ```
 
 - Player/AI mistakes (bad command shape, unaffordable build, unknown target) are **never thrown**: shape
@@ -580,7 +682,7 @@ function invariant(condition: unknown, code: string, message: string, details?: 
 - Impossible states (unbalanced entry constructed by a system, negative inventory, foreign slice write,
   unsafe integer, duplicate handler, NaN) **throw `InvariantError`** immediately with a stable `code`.
   The tick is then undefined; callers (UI, sim-tests) treat the world as poisoned and report seed + tick
-  + code. The engine does not catch and continue.
+  - code. The engine does not catch and continue.
 - No `console.log` in the sim; `console.warn/error` only for truly exceptional diagnostics.
 
 ---

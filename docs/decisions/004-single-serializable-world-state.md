@@ -3,12 +3,14 @@
 **Status:** Accepted (Milestone 0)
 
 ## Context
+
 Save/load, hashing, determinism tests and the UI all need the whole simulation as data. Systems built
 by separate agents need a clear boundary for what they may write. `Map`/`Set` iteration order is
 insertion order, which is a hidden dependency on history; class instances and closures hide state
 from serialization.
 
 ## Decision
+
 - Exactly one `WorldState` object (schema `world.ts`): engine core fields (`seed`, `tick`,
   `epochYear`, `commandSeq`, `pendingCommands`, `registry`, `rng`, `companies`) plus one named slice
   per system (`accounting`, later `economy`, ...). Slice types are shared types and live in schema.
@@ -23,6 +25,7 @@ from serialization.
 - Events are not part of state (ADR-007).
 
 ## Consequences
+
 - `snapshot()` is `JSON.parse(canonicalJson(state))`; no custom serializers.
 - Adding a system means adding a required slice property (schema version bump + migration that
   initialises it).
