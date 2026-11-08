@@ -1,0 +1,30 @@
+{
+  "name": "@nepo/sim",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nepo simulation core: pure, headless, deterministic.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./engine": "./src/engine/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./accounting": "./src/accounting/index.ts",
+    "./economy": "./src/economy/index.ts",
+    "./manufacturing": "./src/manufacturing/index.ts",
+    "./retail": "./src/retail/index.ts",
+    "./finance": "./src/finance/index.ts",
+    "./logistics": "./src/logistics/index.ts",
+    "./ai": "./src/ai/index.ts",
+    "./hr": "./src/hr/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@nepo/tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Content pipeline, data validation, scenario tooling for Nepo.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "validate-data": "tsx src/validate-data.ts"
+  },
+  "dependencies": {
+    "@nepo/sim": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

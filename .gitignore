@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+.turbo/
+*.log
+.DS_Store
+packages/sim-tests/out/
